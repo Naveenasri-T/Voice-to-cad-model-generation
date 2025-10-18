@@ -1,14 +1,3 @@
-"""
-Professional AI Service
-Handles AI-powered transcription and FreeCAD code generation
-
-Features:
-- Professional Groq API integration with robust error handling
-- Advanced prompt engineering for high-quality FreeCAD code generation
-- Audio transcription with speech-to-text capabilities
-- Client-ready AI processing with enterprise-grade reliability
-"""
-
 import logging
 import json
 from typing import Optional, Dict, Any, List
@@ -23,29 +12,14 @@ except ImportError:
 
 from config.settings import AIConfig
 
-
 class AIService:
-    """
-    Professional AI Service for Code Generation and Transcription
-    Enterprise-grade AI integration for CAD model generation
-    """
-    
     def __init__(self, ai_config: AIConfig):
-        """
-        Initialize AI service with configuration
-        
-        Args:
-            ai_config: AI configuration dataclass
-        """
         self.config = ai_config
         self.logger = logging.getLogger(__name__)
         self.client = None
-        
-        # Initialize AI client
         self._initialize_client()
         
     def _initialize_client(self) -> None:
-        """Initialize Groq client with professional error handling"""
         if not GROQ_AVAILABLE:
             self.logger.error("Groq library not available - AI functionality disabled")
             return
@@ -85,49 +59,29 @@ class AIService:
             self.logger.warning(f"AI connection test failed: {e}")
     
     def transcribe_audio(self, audio_file_path: str) -> Optional[str]:
-        """
-        Transcribe audio to text with professional accuracy
-        
-        Args:
-            audio_file_path: Path to audio file
-            
-        Returns:
-            Transcribed text or None if failed
-        """
         if not self.client:
-            self.logger.error("AI client not available for transcription")
             return None
             
         try:
             audio_path = Path(audio_file_path)
-            
             if not audio_path.exists():
-                self.logger.error(f"Audio file not found: {audio_file_path}")
                 return None
             
-            self.logger.info(f"Starting professional transcription: {audio_path.name}")
-            
-            # Read audio file
             with open(audio_path, "rb") as audio_file:
-                # Use Groq's Whisper model for transcription
                 transcription = self.client.audio.transcriptions.create(
                     file=audio_file,
-                    model="whisper-large-v3",  # Use high-quality model
-                    language="en",  # Specify language for better accuracy
+                    model="whisper-large-v3",
+                    language="en",
                     response_format="text",
-                    temperature=0.0  # Deterministic output
+                    temperature=0.0
                 )
             
             if transcription and transcription.strip():
-                cleaned_text = self._clean_transcription(transcription)
-                self.logger.info(f"Transcription successful: '{cleaned_text[:100]}...'")
-                return cleaned_text
-            else:
-                self.logger.warning("Transcription returned empty result")
-                return None
+                return self._clean_transcription(transcription)
+            return None
                 
         except Exception as e:
-            self.logger.error(f"Transcription failed: {e}")
+            return None
             return None
     
     def _clean_transcription(self, text: str) -> str:
@@ -158,41 +112,17 @@ class AIService:
             self.logger.warning(f"Text cleaning failed: {e}")
             return text
     
-    def generate_freecad_code(self, 
-                             command: str, 
-                             model_type: str = "3d",
-                             quality_level: str = "professional",
-                             include_materials: bool = True) -> Optional[str]:
-        """
-        Generate professional FreeCAD code from natural language description
-        
-        Args:
-            command: Natural language description of the model
-            model_type: Type of model (3d or 2d)
-            quality_level: Quality level (professional, standard, draft)
-            include_materials: Whether to include materials and colors
-            
-        Returns:
-            Generated FreeCAD Python code or None if failed
-        """
+    def generate_freecad_code(self, command: str, model_type: str = "3d", 
+                             quality_level: str = "professional", include_materials: bool = True) -> Optional[str]:
         if not self.client:
-            self.logger.error("AI client not available for code generation")
             return None
         
-        # Use structured models for common requests to avoid AI generation issues
         command_lower = command.lower()
-        if any(keyword in command_lower for keyword in [
-            '2bhk', '2 bhk', 'two bedroom', 'apartment', 'house', 'structured'
-        ]) and not any(school_keyword in command_lower for school_keyword in ['school', 'college', 'university']):
-            self.logger.info("Using pre-built structured 2BHK model for reliability")
+        if any(keyword in command_lower for keyword in ['2bhk', '2 bhk', 'two bedroom', 'apartment', 'house', 'structured']) and not any(school_keyword in command_lower for school_keyword in ['school', 'college', 'university']):
             return self._create_simple_2bhk_model()
-        elif any(keyword in command_lower for keyword in [
-            'school', 'college', 'university', 'campus', 'academic', 'classroom', 'education'
-        ]):
-            self.logger.info("Using pre-built structured school model for reliability")
+        elif any(keyword in command_lower for keyword in ['school', 'college', 'university', 'campus', 'academic', 'classroom', 'education']):
             return self._create_school_model()
         elif any(keyword in command_lower for keyword in ['cube', 'box', 'simple']):
-            self.logger.info("Using pre-built cube model for reliability")
             return self._create_simple_cube()
             
         try:
@@ -258,175 +188,24 @@ class AIService:
             return None
     
     def _get_system_prompt(self) -> str:
-        """Get comprehensive system prompt for FreeCAD code generation"""
-        return """You are a professional FreeCAD expert and Python developer specializing in parametric 3D modeling and technical drawings. 
+        return """You are a FreeCAD expert. Generate clean, working FreeCAD Python code.
 
-Your expertise includes:
-- Advanced FreeCAD Python scripting and automation
-- Professional architectural and mechanical design
-- Best practices for clean, maintainable CAD code
-- Industry-standard modeling techniques
-- Professional documentation and code organization
+Requirements:
+- Import FreeCAD and Part
+- Create new document
+- Use proper FreeCAD API only
+- End with doc.recompute() and ViewFit
+- No invalid attributes like ActiveMaterial or DiffuseColor
 
-Guidelines for professional FreeCAD code generation:
+Generate clean, working FreeCAD code."""
 
-1. CODE QUALITY:
-   - Write clean, well-documented Python code
-   - Use meaningful variable names and proper structure
-   - Include professional comments explaining each step
-   - Follow Python PEP 8 style guidelines
-   - Implement proper error handling where appropriate
-
-2. FREECAD BEST PRACTICES:
-   - Always import FreeCAD and create new document
-   - Use Part workbench for solid modeling
-   - Apply proper units and dimensions
-   - Create parametric models when possible
-   - Group related objects logically
-
-3. PROFESSIONAL OUTPUT:
-   - Generate production-ready code suitable for client delivery
-   - Include comprehensive object naming and organization
-   - Apply realistic materials and colors when requested
-   - Ensure models are properly oriented and positioned
-   - Create professional documentation within code
-
-4. TECHNICAL REQUIREMENTS:
-   - Support both 2D technical drawings and 3D models
-   - Generate dimensionally accurate models
-   - Use appropriate FreeCAD primitives and operations
-   - Implement proper Boolean operations for complex shapes
-   - Create professional assemblies when multiple parts are needed
-
-Always generate complete, executable FreeCAD Python code that creates professional-quality models suitable for engineering and architectural applications."""
-
-    def _create_professional_prompt(self, 
-                                  command: str, 
-                                  model_type: str, 
-                                  quality_level: str, 
-                                  include_materials: bool) -> str:
-        """
-        Create comprehensive prompt for professional code generation
+    def _create_professional_prompt(self, command: str, model_type: str, quality_level: str, include_materials: bool) -> str:
         
-        Args:
-            command: User's model description
-            model_type: 3d or 2d
-            quality_level: professional, standard, or draft
-            include_materials: Whether to include materials
-            
-        Returns:
-            Professional prompt for AI generation
-        """
-        
-        quality_instructions = {
-            "professional": """
-            - Generate enterprise-grade, client-ready FreeCAD code
-            - Include comprehensive documentation and comments
-            - Apply professional materials, textures, and realistic colors
-            - Create parametric models with proper constraints
-            - Implement advanced modeling techniques and best practices
-            - Include professional object naming and organization
-            - Generate code suitable for production environments
-            """,
-            "standard": """
-            - Generate well-structured FreeCAD code with good practices
-            - Include clear comments and documentation
-            - Apply appropriate materials and colors
-            - Create accurate dimensional models
-            - Use standard modeling techniques
-            """,
-            "draft": """
-            - Generate functional FreeCAD code for rapid prototyping
-            - Include basic comments for clarity
-            - Focus on shape and form over detailed materials
-            - Create quick conceptual models
-            """
-        }
-        
-        type_instructions = {
-            "3d": """
-            Create a complete 3D model with:
-            - Proper solid geometry using FreeCAD Part workbench
-            - Accurate dimensions and proportions
-            - Professional 3D modeling techniques
-            - Proper object hierarchy and organization
-            """,
-            "2d": """
-            Create professional 2D technical drawings with:
-            - Precise 2D geometry using Draft workbench
-            - Technical drawing standards and conventions  
-            - Proper dimensioning and annotations
-            - Professional drafting techniques
-            """
-        }
-        
-        materials_instruction = ""
-        if include_materials:
-            materials_instruction = """
-            
-            MATERIALS AND APPEARANCE:
-            - Apply realistic materials and colors to all objects
-            - Use appropriate material properties for the object type
-            - Create professional visual appearance suitable for client presentation
-            - Include proper material naming and organization
-            """
-        
-        prompt = f"""
-        PROFESSIONAL FREECAD CODE GENERATION REQUEST
-
-        USER DESCRIPTION: "{command}"
-
-        PROJECT REQUIREMENTS:
-        - Model Type: {model_type.upper()}
-        - Quality Level: {quality_level.upper()}
-        - Include Materials: {'YES' if include_materials else 'NO'}
-
-        QUALITY SPECIFICATIONS:
-        {quality_instructions[quality_level]}
-
-        MODEL TYPE REQUIREMENTS:
-        {type_instructions[model_type]}
-        
-        {materials_instruction}
-
-        TECHNICAL SPECIFICATIONS:
-        - Generate complete, executable Python code for FreeCAD
-        - Start with proper imports: import FreeCAD, import Part, etc.
-        - Create new document: doc = FreeCAD.newDocument()
-        - Use professional variable naming and code organization
-        - Include comprehensive comments explaining each modeling step
-        - End with: doc.recompute() and FreeCAD.Gui.SendMsgToActiveView("ViewFit")
-        - Ensure all objects are properly positioned and oriented
-        - NEVER use FreeCAD.ActiveMaterial, .Material, or .DiffuseColor properties
-        - For colors, ONLY use ViewObject.ShapeColor = (r, g, b) with values 0.0-1.0
-        - Use only standard, well-supported FreeCAD API functions
-
-        PROFESSIONAL STANDARDS:
-        - Code must be production-ready and client-suitable
-        - Include proper error handling where appropriate
-        - Use industry-standard modeling approaches
-        - Generate dimensionally accurate and realistic models
-        - Apply professional naming conventions throughout
-
-        Generate the complete FreeCAD Python code below:
-        """
-        
-        return prompt
+        return f"Create FreeCAD {model_type} model for: {command}. Use import FreeCAD, import Part, create document, build model, end with doc.recompute()."
     
     def _clean_generated_code(self, code: str) -> str:
-        """
-        Clean and enhance generated FreeCAD code
-        
-        Args:
-            code: Raw generated code
-            
-        Returns:
-            Cleaned and enhanced code
-        """
         try:
-            # Remove text before the first python code block
             if '```python' in code:
-                # Extract only the python code from markdown blocks
                 python_blocks = re.findall(r'```python\n?(.*?)\n?```', code, re.DOTALL)
                 if python_blocks:
                     code = python_blocks[0]  # Take the first python block

@@ -1,8 +1,3 @@
-"""
-Professional FreeCAD Service
-Handles FreeCAD model generation, execution, and optimization
-"""
-
 import logging
 import re
 import subprocess
@@ -13,40 +8,29 @@ import ast
 
 from config.settings import FreeCADConfig
 
-
 class FreeCADService:
-    """Professional FreeCAD Service for Model Generation"""
-    
     def __init__(self, freecad_config: FreeCADConfig):
         self.config = freecad_config
         self.logger = logging.getLogger(__name__)
         self.freecad_available = self._detect_freecad()
         
     def _detect_freecad(self) -> bool:
-        """Detect FreeCAD installation"""
         try:
-            # Try to import FreeCAD using sys.path modification if needed
             import sys
             if self.config.installation_path and self.config.installation_path not in sys.path:
                 sys.path.append(self.config.installation_path)
-            # Use try/except to suppress IDE warnings about unresolved imports
             try:
-                # Use __import__ to prevent IDE warnings about unresolved imports
                 FreeCAD = __import__("FreeCAD")
-                self.logger.info(f"FreeCAD detected: Version {FreeCAD.Version()}")
                 return True
             except ImportError:
-                self.logger.warning("FreeCAD not detected - code generation only mode")
                 return False
-        except Exception as e:
-            self.logger.warning(f"Error detecting FreeCAD: {e}")
+        except:
             return False
     
     def generate_model(self, command: str, model_type: str = "3d", 
                       quality_level: str = "professional", 
                       include_materials: bool = True,
                       ai_service=None) -> Optional[str]:
-        """Generate FreeCAD model code"""
         if not ai_service:
             return None
             
@@ -67,31 +51,19 @@ class FreeCADService:
             return None
     
     def _enhance_code(self, code: str, quality_level: str) -> str:
-        """Enhance generated code with professional features"""
         try:
             if quality_level == "professional":
-                header = '''"""
-Professional FreeCAD Model - Client Ready
-Generated with Enterprise AI Technology
-"""
-
-import FreeCAD
+                header = '''import FreeCAD
 import Part
 
-# Create professional document
-doc = FreeCAD.newDocument("ProfessionalModel")
-FreeCAD.Console.PrintMessage("=== Professional Model Generation ===\\n")
-
+doc = FreeCAD.newDocument("Model")
 '''
                 footer = '''
-
-# Professional completion
 doc.recompute()
 if hasattr(FreeCAD, 'Gui'):
     FreeCAD.Gui.SendMsgToActiveView("ViewFit")
     FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
-
-FreeCAD.Console.PrintMessage("Professional model completed successfully\\n")'''
+'''
                 
                 return header + code + footer
             else:
@@ -127,19 +99,15 @@ FreeCAD.Console.PrintMessage("Professional model completed successfully\\n")'''
             return {"error": str(e), "statistics": {}, "quality": {}}
     
     def execute_code_and_open_freecad(self, code: str, filename: str = None) -> Dict[str, Any]:
-        """Execute the generated code and automatically open in FreeCAD"""
         try:
-            # Save the code to a file
             if not filename:
                 from datetime import datetime
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"generated_model_{timestamp}.py"
             
-            # Ensure filename has .py extension
             if not filename.endswith('.py'):
                 filename += '.py'
             
-            # Write code to file
             filepath = Path(filename)
             filepath.parent.mkdir(parents=True, exist_ok=True)
             
@@ -152,27 +120,25 @@ FreeCAD.Console.PrintMessage("Professional model completed successfully\\n")'''
                 "message": f"Code saved to {filepath.name}"
             }
             
-            # Try to automatically launch FreeCAD with the script
             freecad_launched = self._launch_freecad_with_script(str(filepath))
             
             if freecad_launched:
                 result["executed"] = True
                 result["gui_opened"] = True
-                result["message"] += " → FreeCAD launched automatically with your model!"
+                result["message"] += " → FreeCAD launched automatically!"
             else:
-                # Fallback: try to execute in current environment if FreeCAD is available
                 if self.freecad_available:
                     try:
                         exec(code)
                         result["executed"] = True
-                        result["message"] += " and executed in current FreeCAD session"
+                        result["message"] += " and executed"
                     except Exception as e:
                         result["executed"] = False
                         result["execution_error"] = str(e)
                         result["message"] += f" but execution failed: {e}"
                 else:
                     result["executed"] = False
-                    result["message"] += " (FreeCAD not found - please install FreeCAD or run script manually)"
+                    result["message"] += " (FreeCAD not found)"
             
             return result
             
@@ -185,17 +151,14 @@ FreeCAD.Console.PrintMessage("Professional model completed successfully\\n")'''
             }
     
     def _launch_freecad_with_script(self, script_path: str) -> bool:
-        """Launch FreeCAD with the generated script automatically"""
         try:
             import os
             import platform
             import glob
             
-            # Common FreeCAD executable paths with extensive search
             freecad_paths = []
             
             if platform.system() == "Windows":
-                # Search in Program Files directories
                 program_files_dirs = [
                     r"C:\Program Files",
                     r"C:\Program Files (x86)"
@@ -203,14 +166,12 @@ FreeCAD.Console.PrintMessage("Professional model completed successfully\\n")'''
                 
                 for pf_dir in program_files_dirs:
                     if os.path.exists(pf_dir):
-                        # Find all FreeCAD installations
                         freecad_dirs = glob.glob(os.path.join(pf_dir, "FreeCAD*"))
                         for freecad_dir in freecad_dirs:
                             freecad_exe = os.path.join(freecad_dir, "bin", "FreeCAD.exe")
                             if os.path.exists(freecad_exe):
                                 freecad_paths.append(freecad_exe)
                 
-                # Also check common direct paths
                 common_paths = [
                     r"C:\Program Files\FreeCAD 0.21\bin\FreeCAD.exe",
                     r"C:\Program Files\FreeCAD 0.20\bin\FreeCAD.exe",
