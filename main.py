@@ -9,8 +9,8 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 st.set_page_config(
-    page_title="Voice to CAD Generator", 
-    page_icon="🏗️", 
+    page_title="Voice to Blueprint Generator", 
+    page_icon="📐", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -81,8 +81,8 @@ def main():
     # Header
     st.markdown("""
     <div class="main-header">
-        <h1>🏗️ Voice to CAD Generator</h1>
-        <p style="margin: 0; font-size: 1.1rem;">AI-Powered FreeCAD Model Generation with Voice Commands</p>
+        <h1>📐 Voice to Blueprint Generator</h1>
+        <p style="margin: 0; font-size: 1.1rem;">AI-Powered 2D Floor Plans & Technical Drawings with Voice Commands</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -148,16 +148,25 @@ def main():
     try:
         from config.settings import config
         config_ok = True
-        ai_ok = bool(config.ai.groq.api_key)
-    except:
+        
+        # Check API key based on provider
+        if config.ai.provider == 'gemini':
+            ai_ok = bool(config.ai.gemini.api_key)
+        elif config.ai.provider == 'groq':
+            ai_ok = bool(config.ai.groq.api_key)
+        else:
+            ai_ok = False
+            
+    except Exception as e:
         config_ok = False
         ai_ok = False
+        st.error(f"Configuration error: {e}")
         
     if not config_ok:
         st.error("⚠️ Configuration error. Check your setup.")
         return
     if not ai_ok:
-        st.error("⚠️ No API key found. Check your .env file.")
+        st.error(f"⚠️ No {config.ai.provider.upper()} API key found. Check your .env file.")
         return
     
     # Main content area
@@ -173,8 +182,19 @@ def main():
         
         with voice_tab:
             st.markdown('<div class="voice-section">', unsafe_allow_html=True)
+            
+            # Show provider-specific message
+            try:
+                from config.settings import config
+                if config.ai.provider == 'groq':
+                    st.success("🎯 **Using Groq AI**: Full voice transcription with Whisper-large-v3 model enabled!")
+                elif config.ai.provider == 'gemini':
+                    st.info("🎯 **Using Gemini AI**: For best results, use the Text Input tab below. Voice transcription is limited with Gemini.")
+            except:
+                pass
+                
             st.markdown("**🎙️ Record your voice command**")
-            st.info("Click the microphone below and describe your CAD model")
+            st.info("Click the microphone below and describe your floor plan or blueprint")
             
             try:
                 from services.voice_service import VoiceService
@@ -215,9 +235,19 @@ def main():
                                     # Force immediate update
                                     st.rerun()
                                 else:
-                                    st.error("❌ Could not transcribe audio. Please try recording again.")
+                                    if config.ai.provider == 'groq':
+                                        st.error("❌ Could not transcribe audio. Please check your microphone and try recording again.")
+                                        st.info("💡 Tip: Speak clearly and ensure good audio quality for best results with Groq Whisper.")
+                                    elif config.ai.provider == 'gemini':
+                                        st.warning("⚠️ Gemini doesn't support audio transcription. Please use text input below.")
+                                    else:
+                                        st.error("❌ Could not transcribe audio. Please try recording again.")
                             except Exception as e:
                                 st.error(f"❌ Transcription failed: {e}")
+                                if config.ai.provider == 'groq':
+                                    st.info("💡 Tip: Groq Whisper requires clear audio. Try recording again with better audio quality.")
+                                elif config.ai.provider == 'gemini':
+                                    st.info("💡 Tip: With Gemini, use the Text Input tab below for better results")
                                 st.write(f"DEBUG: Exception details: {str(e)}")
                     
                     # Show current transcribed text if available
@@ -241,7 +271,7 @@ def main():
             text_area_value = st.session_state.command_text if st.session_state.get('command_source') == 'text' else ""
             
             command_input = st.text_area(
-                "Describe your CAD model:",
+                "Describe your floor plan or blueprint:",
                 value=text_area_value,
                 placeholder="Example: Create a 2BHK apartment with living room, kitchen, and bedrooms\nExample: Design a simple mechanical gear\nExample: Build a school building with classrooms",
                 height=120,
@@ -302,7 +332,7 @@ def main():
                 "📐 Model Type:",
                 ["3d", "2d"],
                 index=0,
-                help="3D: Full 3D model, 2D: Flat/plan view"
+                help="2D: Floor plan (default), Elevation: Side view, Section: Cut view"
             )
             st.markdown('</div>', unsafe_allow_html=True)
         
@@ -336,12 +366,12 @@ def main():
     
     if current_command:
         st.markdown("---")
-        st.markdown("### 🚀 Generate Your CAD Model")
+        st.markdown("### 🚀 Generate Your Blueprint")
         
-        if st.button("🚀 Generate FreeCAD Model", type="primary", use_container_width=True):
+        if st.button("📐 Generate 2D Blueprint", type="primary", use_container_width=True):
             
             try:
-                with st.spinner("🔄 Generating your FreeCAD model..."):
+                with st.spinner("🔄 Generating your 2D blueprint..."):
                     from config.settings import config
                     from services.ai_service import AIService
                     from services.freecad_service import FreeCADService
@@ -438,8 +468,8 @@ def main():
     st.markdown("""
     <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
         <p style="margin: 0; color: #6c757d;">
-            🏗️ <strong>Voice to CAD Generator</strong> - AI-Powered FreeCAD Model Generation
-            <br>💡 Speak or type your ideas, get professional CAD models
+            📐 <strong>Voice to Blueprint Generator</strong> - AI-Powered 2D Floor Plans & Technical Drawings
+            <br>💡 Speak or type your ideas, get professional blueprints & sketches
         </p>
     </div>
     """, unsafe_allow_html=True)

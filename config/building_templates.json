@@ -1,0 +1,176 @@
+{
+  "residential": {
+    "2bhk": {
+      "name": "2 Bedroom Hall Kitchen Apartment",
+      "total_area_range": [60, 120],
+      "rooms": {
+        "living_room": {
+          "area_percentage": 25,
+          "min_dimensions": [3000, 4000],
+          "optimal_dimensions": [4000, 5500]
+        },
+        "master_bedroom": {
+          "area_percentage": 20,
+          "min_dimensions": [3000, 3500],
+          "optimal_dimensions": [3500, 4500]
+        },
+        "second_bedroom": {
+          "area_percentage": 15,
+          "min_dimensions": [2500, 3000],
+          "optimal_dimensions": [3000, 4000]
+        },
+        "kitchen": {
+          "area_percentage": 10,
+          "min_dimensions": [2000, 2500],
+          "optimal_dimensions": [2500, 3000]
+        },
+        "bathroom": {
+          "area_percentage": 8,
+          "min_dimensions": [1500, 2000],
+          "optimal_dimensions": [2000, 2500]
+        },
+        "dining": {
+          "area_percentage": 12,
+          "min_dimensions": [2500, 3000],
+          "optimal_dimensions": [3000, 3500]
+        },
+        "balcony": {
+          "area_percentage": 8,
+          "min_dimensions": [1500, 2000],
+          "optimal_dimensions": [2000, 3000]
+        }
+      },
+      "features": ["parking", "garden", "entrance", "storage"]
+    },
+    "3bhk": {
+      "name": "3 Bedroom Hall Kitchen Apartment",
+      "total_area_range": [90, 180],
+      "rooms": {
+        "living_room": {
+          "area_percentage": 22,
+          "min_dimensions": [4000, 5000],
+          "optimal_dimensions": [5000, 6500]
+        },
+        "master_bedroom": {
+          "area_percentage": 18,
+          "min_dimensions": [3500, 4000],
+          "optimal_dimensions": [4000, 5000]
+        },
+        "second_bedroom": {
+          "area_percentage": 15,
+          "min_dimensions": [3000, 3500],
+          "optimal_dimensions": [3500, 4000]
+        },
+        "third_bedroom": {
+          "area_percentage": 12,
+          "min_dimensions": [2500, 3000],
+          "optimal_dimensions": [3000, 3500]
+        },
+        "kitchen": {
+          "area_percentage": 8,
+          "min_dimensions": [2500, 3000],
+          "optimal_dimensions": [3000, 3500]
+        },
+        "bathroom": {
+          "area_percentage": 6,
+          "min_dimensions": [1500, 2000],
+          "optimal_dimensions": [2000, 2500]
+        },
+        "master_bathroom": {
+          "area_percentage": 5,
+          "min_dimensions": [2000, 2500],
+          "optimal_dimensions": [2500, 3000]
+        },
+        "dining": {
+          "area_percentage": 10,
+          "min_dimensions": [3000, 3500],
+          "optimal_dimensions": [3500, 4000]
+        },
+        "balcony": {
+          "area_percentage": 4,
+          "min_dimensions": [2000, 2500],
+          "optimal_dimensions": [2500, 3500]
+        }
+      },
+      "features": ["parking", "garden", "entrance", "storage", "utility"]
+    }
+  },
+  "commercial": {
+    "office": {
+      "name": "Commercial Office Building",
+      "total_area_range": [500, 5000],
+      "spaces": {
+        "reception": {
+          "area_percentage": 15,
+          "min_dimensions": [4000, 6000],
+          "optimal_dimensions": [6000, 8000]
+        },
+        "open_office": {
+          "area_percentage": 40,
+          "min_dimensions": [8000, 12000],
+          "optimal_dimensions": [12000, 20000]
+        },
+        "meeting_rooms": {
+          "area_percentage": 20,
+          "count": 3,
+          "min_dimensions": [3000, 4000],
+          "optimal_dimensions": [4000, 6000]
+        },
+        "private_offices": {
+          "area_percentage": 15,
+          "count": 4,
+          "min_dimensions": [2500, 3000],
+          "optimal_dimensions": [3000, 4000]
+        },
+        "cafeteria": {
+          "area_percentage": 10,
+          "min_dimensions": [4000, 5000],
+          "optimal_dimensions": [5000, 7000]
+        }
+      },
+      "features": ["parking", "elevators", "fire_exits", "server_room", "storage"]
+    }
+  },
+  "educational": {
+    "school": {
+      "name": "Educational School Building",
+      "total_area_range": [1000, 10000],
+      "spaces": {
+        "classrooms": {
+          "area_percentage": 50,
+          "count": 12,
+          "min_dimensions": [6000, 8000],
+          "optimal_dimensions": [8000, 10000],
+          "capacity": 30
+        },
+        "library": {
+          "area_percentage": 15,
+          "min_dimensions": [8000, 10000],
+          "optimal_dimensions": [10000, 15000]
+        },
+        "laboratory": {
+          "area_percentage": 10,
+          "count": 2,
+          "min_dimensions": [6000, 8000],
+          "optimal_dimensions": [8000, 12000]
+        },
+        "computer_lab": {
+          "area_percentage": 8,
+          "min_dimensions": [6000, 8000],
+          "optimal_dimensions": [8000, 10000]
+        },
+        "auditorium": {
+          "area_percentage": 12,
+          "min_dimensions": [10000, 15000],
+          "optimal_dimensions": [15000, 25000]
+        },
+        "staff_room": {
+          "area_percentage": 5,
+          "min_dimensions": [4000, 6000],
+          "optimal_dimensions": [6000, 8000]
+        }
+      },
+      "features": ["playground", "parking", "cafeteria", "fire_exits", "admin_office"]
+    }
+  }
+}

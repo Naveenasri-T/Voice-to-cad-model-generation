@@ -268,16 +268,13 @@ class AIService:
             self.logger.warning(f"Text cleaning failed: {e}")
             return text
     
-    def generate_freecad_code(self, command: str, model_type: str = "2d", 
-                             quality_level: str = "professional", include_materials: bool = False) -> Optional[str]:
+    def generate_freecad_code(self, command: str, model_type: str = "3d", 
+                             quality_level: str = "professional", include_materials: bool = True) -> Optional[str]:
         if not self.client:
             return None
         
-        # FORCE 2D mode - we only generate blueprints now
-        model_type = "2d"
-        
         try:
-            self.logger.info(f"Generating professional 2D blueprint for: {command}")
+            self.logger.info(f"Generating {quality_level} {model_type} FreeCAD code for: {command}")
             
             # Create intelligent prompt using dynamic configuration
             prompt = self._create_professional_prompt(command, model_type, quality_level, include_materials)
@@ -299,18 +296,6 @@ class AIService:
             if generated_code:
                 # Clean and validate generated code
                 cleaned_code = self._clean_generated_code(generated_code)
-                
-                # CRITICAL: Check for 3D objects and reject them
-                if self._contains_3d_objects(cleaned_code):
-                    self.logger.error("Generated code contains 3D objects! Regenerating with 2D-only...")
-                    return self._regenerate_as_2d_only(command, model_type)
-                
-                # Check if output is too simple (just basic rectangle)
-                # Skip complexity check for template-generated code
-                is_template = "# TEMPLATE_GENERATED" in cleaned_code
-                if cleaned_code and not is_template and not self._has_sufficient_complexity(cleaned_code):
-                    self.logger.error("Generated code is too simple! Regenerating with complexity requirement...")
-                    return self._regenerate_as_2d_only(command, model_type)
                 
                 if self._validate_freecad_code(cleaned_code):
                     self.logger.info("Professional FreeCAD code generated successfully")
@@ -370,20 +355,12 @@ class AIService:
                 if response and hasattr(response, 'text') and response.text:
                     # Post-process the generic response to make it FreeCAD-specific
                     return self._adapt_generic_code_to_freecad(response.text, prompt)
-                else:
-                    self.logger.warning("Gemini returned empty or blocked response, using template")
-                    return self._create_intelligent_template(prompt)
                     
             except Exception as e:
-                self.logger.warning(f"Generic Gemini approach failed: {e}, using template")
-                # Use intelligent template when Gemini is blocked
-                # Mark this as template-generated to skip complexity check
-                template_code = self._create_intelligent_template(prompt)
-                return "# TEMPLATE_GENERATED\n" + template_code
+                self.logger.warning(f"Generic Gemini approach failed: {e}")
             
             # If all AI approaches fail, use intelligent template matching
-            template_code = self._create_intelligent_template(prompt)
-            return "# TEMPLATE_GENERATED\n" + template_code
+            return self._create_intelligent_template(prompt)
             
         except Exception as e:
             self.logger.error(f"Gemini generation completely failed: {e}")
@@ -420,139 +397,94 @@ class AIService:
                     break
         
         return f'''import FreeCAD
-import Draft
+import Part
 
-doc = FreeCAD.newDocument("{room_count}BHK_House_Blueprint")
+# Create new document
+doc = FreeCAD.newDocument("House_Model")
 
-# === FRONT VIEW (y_offset = 0) ===
-front_outline = Draft.makeWire([
-    FreeCAD.Vector(0, 0, 0),
-    FreeCAD.Vector(12000, 0, 0),
-    FreeCAD.Vector(12000, 3000, 0),
-    FreeCAD.Vector(0, 3000, 0),
-    FreeCAD.Vector(0, 0, 0)
-], closed=True)
-front_outline.ViewObject.LineWidth = 3.0
+# House dimensions (in millimeters)
+house_length = 10000  # 10 meters
+house_width = 8000    # 8 meters
+wall_height = 3000    # 3 meters
+wall_thickness = 200  # 200mm
 
-# Doors and windows
-door1 = Draft.makeLine(FreeCAD.Vector(1000, 0, 0), FreeCAD.Vector(1900, 0, 0))
-door1.ViewObject.LineWidth = 2.0
-window1 = Draft.makeRectangle(800, 1200, placement=FreeCAD.Placement(FreeCAD.Vector(3000, 800, 0), FreeCAD.Rotation(0, 0, 0)))
-window1.ViewObject.LineWidth = 1.5
-window2 = Draft.makeRectangle(800, 1200, placement=FreeCAD.Placement(FreeCAD.Vector(8000, 800, 0), FreeCAD.Rotation(0, 0, 0)))
-window2.ViewObject.LineWidth = 1.5
+# Create foundation
+foundation = doc.addObject("Part::Box", "Foundation")
+foundation.Length = house_length
+foundation.Width = house_width
+foundation.Height = 300
+foundation.Placement.Base = FreeCAD.Vector(0, 0, 0)
 
-# Dimensions
-dim1 = Draft.make_linear_dimension(FreeCAD.Vector(0, -500, 0), FreeCAD.Vector(12000, -500, 0))
-dim1.ViewObject.FontSize = 300
-dim2 = Draft.make_linear_dimension(FreeCAD.Vector(-500, 0, 0), FreeCAD.Vector(-500, 3000, 0))
-dim2.ViewObject.FontSize = 300
+# Create exterior walls
+# Front wall
+front_wall = doc.addObject("Part::Box", "FrontWall")
+front_wall.Length = house_length
+front_wall.Width = wall_thickness
+front_wall.Height = wall_height
+front_wall.Placement.Base = FreeCAD.Vector(0, 0, 300)
 
-# === TOP VIEW (y_offset = 5000) ===
-top_outline = Draft.makeWire([
-    FreeCAD.Vector(0, 5000, 0),
-    FreeCAD.Vector(12000, 5000, 0),
-    FreeCAD.Vector(12000, 13000, 0),
-    FreeCAD.Vector(0, 13000, 0),
-    FreeCAD.Vector(0, 5000, 0)
-], closed=True)
-top_outline.ViewObject.LineWidth = 3.0
+# Back wall
+back_wall = doc.addObject("Part::Box", "BackWall")
+back_wall.Length = house_length
+back_wall.Width = wall_thickness
+back_wall.Height = wall_height
+back_wall.Placement.Base = FreeCAD.Vector(0, house_width - wall_thickness, 300)
 
-# Rooms
-living_room = Draft.makeRectangle(5000, 4000, placement=FreeCAD.Placement(FreeCAD.Vector(1000, 6000, 0), FreeCAD.Rotation(0, 0, 0)))
-living_room.ViewObject.LineWidth = 1.5
-living_label = Draft.make_text(["Living Room"], placement=FreeCAD.Placement(FreeCAD.Vector(2500, 7500, 0), FreeCAD.Rotation(0, 0, 0)))
-living_label.ViewObject.FontSize = 200
+# Left wall
+left_wall = doc.addObject("Part::Box", "LeftWall")
+left_wall.Length = wall_thickness
+left_wall.Width = house_width
+left_wall.Height = wall_height
+left_wall.Placement.Base = FreeCAD.Vector(0, 0, 300)
 
-kitchen = Draft.makeRectangle(3000, 3000, placement=FreeCAD.Placement(FreeCAD.Vector(7000, 6000, 0), FreeCAD.Rotation(0, 0, 0)))
-kitchen.ViewObject.LineWidth = 1.5
-kitchen_label = Draft.make_text(["Kitchen"], placement=FreeCAD.Placement(FreeCAD.Vector(7800, 7200, 0), FreeCAD.Rotation(0, 0, 0)))
-kitchen_label.ViewObject.FontSize = 200
+# Right wall
+right_wall = doc.addObject("Part::Box", "RightWall")
+right_wall.Length = wall_thickness
+right_wall.Width = house_width
+right_wall.Height = wall_height
+right_wall.Placement.Base = FreeCAD.Vector(house_length - wall_thickness, 0, 300)
 
-bedroom1 = Draft.makeRectangle(4000, 3000, placement=FreeCAD.Placement(FreeCAD.Vector(1000, 10000, 0), FreeCAD.Rotation(0, 0, 0)))
-bedroom1.ViewObject.LineWidth = 1.5
-bed1_label = Draft.make_text(["Bedroom 1"], placement=FreeCAD.Placement(FreeCAD.Vector(2200, 11000, 0), FreeCAD.Rotation(0, 0, 0)))
-bed1_label.ViewObject.FontSize = 200
+# Create interior partitions for {room_count} bedrooms
+for i in range({room_count}):
+    partition = doc.addObject("Part::Box", f"Partition_{{i+1}}")
+    partition.Length = house_length // 2
+    partition.Width = wall_thickness
+    partition.Height = wall_height
+    partition.Placement.Base = FreeCAD.Vector(house_length // 4, (i + 1) * house_width // 3, 300)
 
-bedroom2 = Draft.makeRectangle(4000, 3000, placement=FreeCAD.Placement(FreeCAD.Vector(6000, 10000, 0), FreeCAD.Rotation(0, 0, 0)))
-bedroom2.ViewObject.LineWidth = 1.5
-bed2_label = Draft.make_text(["Bedroom 2"], placement=FreeCAD.Placement(FreeCAD.Vector(7200, 11000, 0), FreeCAD.Rotation(0, 0, 0)))
-bed2_label.ViewObject.FontSize = 200
+# Create roof
+roof = doc.addObject("Part::Box", "Roof")
+roof.Length = house_length
+roof.Width = house_width
+roof.Height = 200
+roof.Placement.Base = FreeCAD.Vector(0, 0, wall_height + 300)
 
-# Dimensions
-dim3 = Draft.make_linear_dimension(FreeCAD.Vector(0, 4500, 0), FreeCAD.Vector(12000, 4500, 0))
-dim3.ViewObject.FontSize = 300
-dim4 = Draft.make_linear_dimension(FreeCAD.Vector(-500, 5000, 0), FreeCAD.Vector(-500, 13000, 0))
-dim4.ViewObject.FontSize = 300
-
-# === SIDE VIEW (y_offset = 15000) ===
-side_outline = Draft.makeWire([
-    FreeCAD.Vector(0, 15000, 0),
-    FreeCAD.Vector(8000, 15000, 0),
-    FreeCAD.Vector(8000, 18000, 0),
-    FreeCAD.Vector(0, 18000, 0),
-    FreeCAD.Vector(0, 15000, 0)
-], closed=True)
-side_outline.ViewObject.LineWidth = 3.0
-
-# Dimensions
-dim5 = Draft.make_linear_dimension(FreeCAD.Vector(0, 14500, 0), FreeCAD.Vector(8000, 14500, 0))
-dim5.ViewObject.FontSize = 300
-dim6 = Draft.make_linear_dimension(FreeCAD.Vector(-500, 15000, 0), FreeCAD.Vector(-500, 18000, 0))
-dim6.ViewObject.FontSize = 300
-
-# === GRID SYSTEM ===
-for i in range(0, 13000, 2000):
-    grid_h = Draft.makeLine(FreeCAD.Vector(i, 0, 0), FreeCAD.Vector(i, 18000, 0))
-    grid_h.ViewObject.LineWidth = 0.3
-    # LineStyle "Dotted" not supported, using thin line instead
-    label = Draft.make_text([chr(65 + i//2000)], placement=FreeCAD.Placement(FreeCAD.Vector(i, -700, 0), FreeCAD.Rotation(0, 0, 0)))
-    label.ViewObject.FontSize = 200
-
-for i in range(0, 18000, 2000):
-    grid_v = Draft.makeLine(FreeCAD.Vector(0, i, 0), FreeCAD.Vector(12000, i, 0))
-    grid_v.ViewObject.LineWidth = 0.3
-    # LineStyle "Dotted" not supported, using thin line instead
-
-# === TITLE BLOCK ===
-title = Draft.make_text(["{room_count}BHK House Blueprint", "Scale: 1:100", "Date: 2025-11-30"], placement=FreeCAD.Placement(FreeCAD.Vector(9000, -1200, 0), FreeCAD.Rotation(0, 0, 0)))
-title.ViewObject.FontSize = 250
-
+# Recompute and fit view
 doc.recompute()
 if hasattr(FreeCAD, 'Gui'):
     FreeCAD.Gui.SendMsgToActiveView("ViewFit")
-    FreeCAD.Gui.activeDocument().activeView().viewTop()
+    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
 '''
     
     def _generate_cube_template(self, prompt: str) -> str:
         return '''import FreeCAD
-import Draft
+import Part
 
-doc = FreeCAD.newDocument("Cube_Blueprint")
+# Create new document
+doc = FreeCAD.newDocument("Cube_Model")
 
-# Front View
-front = Draft.makeRectangle(100, 100)
-front.ViewObject.LineWidth = 2.0
-dim1 = Draft.make_linear_dimension(FreeCAD.Vector(0, -20, 0), FreeCAD.Vector(100, -20, 0))
-dim1.ViewObject.FontSize = 200
+# Create a cube
+cube = doc.addObject("Part::Box", "Cube")
+cube.Length = 100  # 100mm
+cube.Width = 100   # 100mm
+cube.Height = 100  # 100mm
+cube.Placement.Base = FreeCAD.Vector(0, 0, 0)
 
-# Top View  
-top = Draft.makeRectangle(100, 100, placement=FreeCAD.Placement(FreeCAD.Vector(150, 0, 0), FreeCAD.Rotation(0, 0, 0)))
-top.ViewObject.LineWidth = 2.0
-
-# Side View
-side = Draft.makeRectangle(100, 100, placement=FreeCAD.Placement(FreeCAD.Vector(300, 0, 0), FreeCAD.Rotation(0, 0, 0)))
-side.ViewObject.LineWidth = 2.0
-
-# Labels
-label1 = Draft.make_text(["Front"], placement=FreeCAD.Placement(FreeCAD.Vector(20, -40, 0), FreeCAD.Rotation(0, 0, 0)))
-label2 = Draft.make_text(["Top"], placement=FreeCAD.Placement(FreeCAD.Vector(170, -40, 0), FreeCAD.Rotation(0, 0, 0)))
-label3 = Draft.make_text(["Side"], placement=FreeCAD.Placement(FreeCAD.Vector(320, -40, 0), FreeCAD.Rotation(0, 0, 0)))
-
+# Recompute and fit view
 doc.recompute()
 if hasattr(FreeCAD, 'Gui'):
     FreeCAD.Gui.SendMsgToActiveView("ViewFit")
-    FreeCAD.Gui.activeDocument().activeView().viewTop()
+    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
 '''
     
     def _generate_cylinder_template(self, prompt: str) -> str:
@@ -596,30 +528,23 @@ if hasattr(FreeCAD, 'Gui'):
     
     def _generate_generic_template(self, prompt: str) -> str:
         return '''import FreeCAD
-import Draft
+import Part
 
-doc = FreeCAD.newDocument("Technical_Drawing")
+# Create new document
+doc = FreeCAD.newDocument("Generic_Model")
 
-# Front View
-front = Draft.makeRectangle(5000, 3000)
-front.ViewObject.LineWidth = 2.5
-Draft.make_text(["FRONT VIEW"], placement=FreeCAD.Placement(FreeCAD.Vector(1500, -500, 0), FreeCAD.Rotation(0, 0, 0)))
+# Create a basic object
+obj = doc.addObject("Part::Box", "BasicObject")
+obj.Length = 100
+obj.Width = 100
+obj.Height = 100
+obj.Placement.Base = FreeCAD.Vector(0, 0, 0)
 
-# Top View
-top = Draft.makeRectangle(5000, 4000, placement=FreeCAD.Placement(FreeCAD.Vector(0, 5000, 0), FreeCAD.Rotation(0, 0, 0)))
-top.ViewObject.LineWidth = 2.5
-Draft.make_text(["TOP VIEW"], placement=FreeCAD.Placement(FreeCAD.Vector(1500, 4500, 0), FreeCAD.Rotation(0, 0, 0)))
-
-# Dimensions
-dim1 = Draft.make_linear_dimension(FreeCAD.Vector(0, -800, 0), FreeCAD.Vector(5000, -800, 0))
-dim1.ViewObject.FontSize = 250
-dim2 = Draft.make_linear_dimension(FreeCAD.Vector(-800, 0, 0), FreeCAD.Vector(-800, 3000, 0))
-dim2.ViewObject.FontSize = 250
-
+# Recompute and fit view
 doc.recompute()
 if hasattr(FreeCAD, 'Gui'):
     FreeCAD.Gui.SendMsgToActiveView("ViewFit")
-    FreeCAD.Gui.activeDocument().activeView().viewTop()
+    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
 '''
     
     def _get_basic_freecad_template(self, prompt: str) -> str:
@@ -1445,8 +1370,400 @@ Generate production-ready FreeCAD Python code that creates a professional {model
     
     def _get_system_prompt(self) -> str:
         """Get the enhanced system prompt for AI Design Engineer code generation"""
-        from config.load_prompt import load_system_prompt
-        return load_system_prompt()
+        return """You are a PROFESSIONAL ARCHITECTURAL AI ENGINEER. You MUST create INTEGRATED, REALISTIC building models - NOT disconnected boxes!
+
+🚨 CRITICAL RULE: NEVER CREATE SEPARATE OVERLAPPING OBJECTS AT (0,0,0)!
+
+=====================================================================
+🧠 MANDATORY INTEGRATION PRINCIPLES
+=====================================================================
+
+1. ONE UNIFIED BUILDING: Create a single, connected structure
+2. LOGICAL POSITIONING: Each room/element at unique coordinates  
+3. SHARED WALLS: Rooms share common walls, don't duplicate
+4. SINGLE FOUNDATION: One foundation supporting entire building
+5. UNIFIED ROOF: One roof covering all spaces
+6. REALISTIC PROPORTIONS: Based on human scale and usage
+
+=====================================================================
+🏗️ REQUIRED CODE STRUCTURE (FOLLOW EXACTLY!)
+=====================================================================
+
+You MUST generate code following this EXACT pattern:
+
+```python
+import FreeCAD
+import Part
+import Draft
+
+doc = FreeCAD.newDocument("Integrated_Building")
+
+print("=== ARCHITECTURAL ANALYSIS ===")
+print("Building Type: [YOUR ANALYSIS]")
+print("Required Spaces: [LIST ALL ROOMS]") 
+print("Integration Strategy: Single unified structure with shared walls")
+
+# STEP 1: CALCULATE TOTAL BUILDING SIZE
+total_building_length = [CALCULATE BASED ON ROOM LAYOUT]
+total_building_width = [CALCULATE BASED ON ROOM ARRANGEMENT]
+wall_thickness = 200  # Standard 200mm walls
+ceiling_height = 3000  # Standard 3m ceiling
+
+print(f"Total Building: {total_building_length}mm x {total_building_width}mm")
+
+# STEP 2: CREATE SINGLE UNIFIED FOUNDATION
+foundation = doc.addObject("Part::Box", "Foundation") 
+foundation.Length = total_building_length
+foundation.Width = total_building_width
+foundation.Height = 150
+foundation.Placement = FreeCAD.Placement(FreeCAD.Vector(0, 0, 0), FreeCAD.Rotation(0, 0, 0))
+foundation.ViewObject.ShapeColor = (0.3, 0.3, 0.3)
+
+# STEP 3: CREATE PERIMETER WALLS (EXTERIOR BOUNDARIES)
+# Front wall
+front_wall = doc.addObject("Part::Box", "Front_Wall")
+front_wall.Length = total_building_length  
+front_wall.Width = wall_thickness
+front_wall.Height = ceiling_height
+front_wall.Placement = FreeCAD.Placement(FreeCAD.Vector(0, 0, 150), FreeCAD.Rotation(0, 0, 0))
+front_wall.ViewObject.ShapeColor = (0.9, 0.85, 0.7)
+
+# Back wall  
+back_wall = doc.addObject("Part::Box", "Back_Wall")
+back_wall.Length = total_building_length
+back_wall.Width = wall_thickness  
+back_wall.Height = ceiling_height
+back_wall.Placement = FreeCAD.Placement(FreeCAD.Vector(0, total_building_width - wall_thickness, 150), FreeCAD.Rotation(0, 0, 0))
+back_wall.ViewObject.ShapeColor = (0.9, 0.85, 0.7)
+
+# Left wall
+left_wall = doc.addObject("Part::Box", "Left_Wall")
+left_wall.Length = wall_thickness
+left_wall.Width = total_building_width
+left_wall.Height = ceiling_height  
+left_wall.Placement = FreeCAD.Placement(FreeCAD.Vector(0, 0, 150), FreeCAD.Rotation(0, 0, 0))
+left_wall.ViewObject.ShapeColor = (0.9, 0.85, 0.7)
+
+# Right wall
+right_wall = doc.addObject("Part::Box", "Right_Wall")
+right_wall.Length = wall_thickness
+right_wall.Width = total_building_width
+right_wall.Height = ceiling_height
+right_wall.Placement = FreeCAD.Placement(FreeCAD.Vector(total_building_length - wall_thickness, 0, 150), FreeCAD.Rotation(0, 0, 0))
+right_wall.ViewObject.ShapeColor = (0.9, 0.85, 0.7)
+
+# STEP 4: CREATE INTERIOR PARTITION WALLS AT SPECIFIC COORDINATES
+# [Add partition walls at calculated positions to divide spaces]
+
+# STEP 5: CREATE SINGLE UNIFIED ROOF  
+roof = doc.addObject("Part::Box", "Roof")
+roof.Length = total_building_length + 400  # 200mm overhang each side
+roof.Width = total_building_width + 400
+roof.Height = 150
+roof.Placement = FreeCAD.Placement(FreeCAD.Vector(-200, -200, ceiling_height + 150), FreeCAD.Rotation(0, 0, 0))
+roof.ViewObject.ShapeColor = (0.8, 0.2, 0.1)
+
+# STEP 6: ADD DOORS AND WINDOWS AT LOGICAL POSITIONS
+# [Add openings with specific coordinates]
+
+# STEP 7: ADD ROOM LABELS
+# [Add text labels for each room]
+
+doc.recompute()
+if hasattr(FreeCAD, 'Gui'):
+    FreeCAD.Gui.SendMsgToActiveView("ViewFit")
+    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
+
+print("=== MODEL SUMMARY ===")
+print("✓ INTEGRATED STRUCTURE: Single unified building")
+print("✓ REALISTIC PROPORTIONS: Human-scale dimensions")  
+print("✓ LOGICAL LAYOUT: Connected rooms with shared walls")
+```
+
+🚨 CRITICAL: Each object MUST have unique coordinates - never put multiple objects at (0,0,0)!
+
+=====================================================================
+❌ FORBIDDEN PATTERNS - NEVER DO THIS!
+=====================================================================
+❌ Multiple objects at same coordinates (0,0,0)
+❌ Separate disconnected room "boxes" 
+❌ Overlapping elements in same space
+❌ Missing integration between components
+❌ Random unrealistic dimensions
+
+=====================================================================
+🎯 INTELLIGENT ARCHITECTURAL ANALYSIS
+=====================================================================
+For EVERY request, you must demonstrate THINKING:
+
+1. BUILDING TYPE ANALYSIS:
+   - 2BHK House → Living room, 2 bedrooms, kitchen, bathroom, possible balcony
+   - 3BHK Apartment → More spacious, master bedroom with attached bath
+   - Office Building → Reception, offices, conference room, circulation
+   - School → Classrooms, corridors, administrative areas
+   
+2. REALISTIC PROPORTIONS (Based on architectural standards):
+   - Living Room: 4m x 5m (20 sq.m) - primary social space
+   - Master Bedroom: 3.5m x 4m (14 sq.m) - with wardrobe space
+   - Kitchen: 2.5m x 3m (7.5 sq.m) - efficient work triangle
+   - Bathroom: 2m x 2.5m (5 sq.m) - standard fixtures
+   - Wall thickness: 200mm (8 inches) - structural requirement
+   - Ceiling height: 3m (10 feet) - comfortable head room
+
+3. LOGICAL SPATIAL RELATIONSHIPS:
+   - Kitchen near dining area for easy serving
+   - Bedrooms in quiet zones away from living areas
+   - Bathrooms accessible but private
+   - Entry/foyer leading to main living space
+   - Windows for natural light in all rooms
+
+4. STRUCTURAL INTEGRATION:
+   - Foundation supporting all walls
+   - Load-bearing walls properly positioned
+   - Floor slab spanning between supports
+   - Roof structure with proper drainage
+
+=====================================================================
+🔢 INTELLIGENT PARAMETRIC DESIGN
+=====================================================================
+THINK AND CALCULATE - Don't use random numbers!
+
+STEP 1: ANALYZE REQUIREMENTS
+- How many rooms needed?
+- What functions must be accommodated?
+- What is the realistic total area required?
+
+STEP 2: CALCULATE DIMENSIONS
+Based on architectural standards:
+```python
+# Example for 2BHK house - THINK through this process:
+living_room_area = 20  # sq.m (realistic for family activities)
+master_bedroom_area = 14  # sq.m (queen bed + wardrobe)
+second_bedroom_area = 12  # sq.m (single/double bed)
+kitchen_area = 8  # sq.m (efficient cooking space)
+bathroom_area = 5  # sq.m (standard fixtures)
+
+# Calculate logical dimensions
+living_length = math.sqrt(living_room_area * 1.25)  # 5m (rectangular room)
+living_width = living_room_area / living_length     # 4m
+
+# Position logically
+# Living room at front for natural light
+# Kitchen adjacent to living for easy access
+# Bedrooms in quiet zone
+# Bathroom privately positioned
+```
+
+STEP 3: INTEGRATE STRUCTURALLY
+- Walls must form enclosed spaces
+- Doors must provide access between rooms
+- Windows must provide light and ventilation
+- Roof must cover entire structure
+- Foundation must support everything
+
+=====================================================================
+VISUAL & STRUCTURAL DESIGN STANDARDS
+=====================================================================
+- Color code logically:
+   Walls → light beige (0.9, 0.85, 0.7)
+   Roof → red or terracotta (0.8, 0.2, 0.1)
+   Floor → light gray (0.7, 0.7, 0.7)
+   Foundation → dark gray (0.4, 0.4, 0.4)
+   Green → landscape or lawn area (0.2, 0.8, 0.2)
+- Maintain realistic height and scale
+- Add professional finishing like:
+   Foundation base, Roof slab, Floor outline, Openings for windows and doors
+- Ensure smooth alignment and recompute at the end
+
+=====================================================================
+TECHNICAL DRAWING REQUIREMENTS
+=====================================================================
+Generate professional technical drawings with:
+1. DIMENSIONING:
+   - All critical dimensions shown with dimension lines
+   - Proper dimension text formatting (e.g., "3.50m", "120°", "R15")
+   - Linear, angular, and radial dimensions as appropriate
+   - Dimension lines with arrows and extension lines
+
+2. ANNOTATIONS:
+   - Room labels and areas (e.g., "LIVING ROOM - 25.0 sq.m")
+   - Material specifications (e.g., "RCC Wall - 200mm thick")
+   - Level indicators and elevation marks
+   - Technical notes and specifications
+
+3. VIEWS:
+   - Plan view (top view) with room layouts
+   - Section views showing heights and structural details
+   - Elevation views showing external facades
+   - Detail views for complex areas
+
+4. PROFESSIONAL FORMATTING:
+   - Proper line weights (thick for outlines, thin for dimensions)
+   - Standard architectural symbols and hatching
+   - Title blocks with project information
+   - Scale indicators and drawing numbers
+
+=====================================================================
+🏗️ MANDATORY CODE STRUCTURE
+=====================================================================
+Your FreeCAD code MUST follow this intelligent structure:
+
+```python
+import FreeCAD
+import Part
+import Draft
+
+# 1. CREATE DOCUMENT
+doc = FreeCAD.newDocument("Intelligent_Design")
+
+# 2. ARCHITECTURAL ANALYSIS (Show your thinking!)
+print("=== ARCHITECTURAL ANALYSIS ===")
+print("Building Type: [analyze from user input]")
+print("Required Rooms: [list all rooms needed]")
+print("Spatial Strategy: [explain layout logic]")
+print("Structural Approach: [explain construction method]")
+
+# 3. PARAMETRIC CALCULATIONS (Show calculations!)
+print("\\n=== PARAMETRIC CALCULATIONS ===")
+# Calculate realistic dimensions based on function
+# Show your mathematical thinking process
+
+# 4. BUILD INTELLIGENT STRUCTURE
+def create_foundation():
+    # Create proper foundation that supports everything
+    
+def create_walls():
+    # Create walls that form proper rooms with logical connections
+    
+def create_openings():
+    # Create doors and windows in logical positions
+    
+def create_roof():
+    # Create roof that properly covers and protects
+    
+def create_interiors():
+    # Add interior elements and finishes
+    
+def apply_materials_and_colors():
+    # Apply realistic materials and professional colors
+
+# 5. EXECUTE BUILD SEQUENCE
+create_foundation()
+create_walls()  
+create_openings()
+create_roof()
+create_interiors()
+apply_materials_and_colors()
+
+# 6. FINALIZE
+doc.recompute()
+if hasattr(FreeCAD, 'Gui'):
+    FreeCAD.Gui.SendMsgToActiveView("ViewFit")
+    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
+
+# 7. ARCHITECTURAL SUMMARY
+print("\\n=== FINAL MODEL SUMMARY ===")
+print("Total Built Area: [calculated area]")
+print("Room Areas: [list each room with area]")
+print("Structural Elements: [list walls, slabs, etc.]")
+print("Design Features: [list windows, doors, etc.]")
+```
+
+=====================================================================
+❌ FORBIDDEN PATTERNS - NEVER CREATE BASIC BOXES!
+=====================================================================
+DO NOT CREATE SIMPLE BOX MODELS LIKE THIS:
+```python
+# DON'T DO THIS - This creates ugly, unrealistic models:
+wall1 = doc.addObject("Part::Box", "Wall1")
+wall1.Length = 5000
+wall1.Width = 200  
+wall1.Height = 3000
+# This is NOT architecture - it's just boxes!
+```
+
+INSTEAD, CREATE INTELLIGENT ARCHITECTURE:
+```python
+# DO THIS - Create realistic, integrated structures:
+def create_living_room():
+    # Calculate logical dimensions
+    area_needed = 20  # sq.m for comfortable living
+    length = 5000  # mm (realistic for furniture layout)
+    width = 4000   # mm (proper proportions)
+    
+    # Create walls that form a proper room
+    # Position windows for natural light
+    # Connect to other rooms logically
+    # Apply proper materials and colors
+```
+
+TECHNICAL REQUIREMENTS:
+- NO TechDraw unless specifically requested (causes errors)
+- Use .ViewObject.ShapeColor for colors, not deprecated properties
+- Always create integrated, realistic models, never separate boxes
+- Show architectural thinking in comments and print statements
+
+ERROR HANDLING:
+- If input is unrelated to architecture or engineering → return None
+- If any computed parameter results in negative or invalid geometry → adjust logically
+- Always ensure the model remains proportionally accurate and visually clean
+
+BEHAVIORAL RULES:
+- Never use hardcoded numeric constants
+- All values derived from user context or logical ratios
+- Every part must be modular, parameter-based, and contextually labeled
+- Model should be realistic enough for academic or professional submission
+- FreeCADGui.showMainWindow() - not needed
+- FreeCADGui.updateGui() - not needed
+
+CODE QUALITY:
+- Write clean, well-commented Python code
+- Use meaningful variable names
+- Group related operations logically
+- Include error handling where appropriate
+- Follow professional coding standards
+
+ARCHITECTURAL ACCURACY:
+- Respect minimum room sizes and building codes
+- Use realistic wall thicknesses and ceiling heights
+- Position doors and windows appropriately
+- Include structural elements like slabs and beams
+- Consider functional layouts and circulation
+
+=====================================================================
+🎯 SUCCESS CRITERIA - WHAT GOOD OUTPUT LOOKS LIKE
+=====================================================================
+Your generated models MUST demonstrate:
+
+✅ INTELLIGENT THINKING: Show analysis and planning in print statements
+✅ REALISTIC PROPORTIONS: Rooms sized for human habitation and use
+✅ INTEGRATED DESIGN: All elements work together as unified structure  
+✅ PROFESSIONAL APPEARANCE: Proper materials, colors, and finishing
+✅ LOGICAL LAYOUTS: Rooms connected sensibly with proper circulation
+✅ STRUCTURAL INTEGRITY: Foundation, walls, roof work as system
+✅ FUNCTIONAL DESIGN: Doors, windows positioned for use and light
+
+❌ AVOID THESE FAILURES:
+❌ Basic box models that look like shipping containers
+❌ Unrealistic proportions or random dimensions  
+❌ Disconnected elements floating in space
+❌ Missing architectural thinking or analysis
+❌ Ugly gray boxes without proper materials
+❌ Rooms that don't connect or make functional sense
+
+REMEMBER: You are creating HOMES and BUILDINGS for people to live and work in.
+Make them beautiful, functional, and realistic!
+
+✅ WHAT GOOD OUTPUT LOOKS LIKE:
+- Single foundation covering entire building footprint
+- Perimeter walls forming building envelope  
+- Interior walls dividing spaces logically
+- One roof covering everything
+- Doors and windows at proper positions
+- Professional materials and colors
+- Room labels and area calculations
+
+GENERATE INTEGRATED ARCHITECTURAL MODELS - NOT SCATTERED BOXES!
     
     def _clean_generated_code(self, code: str) -> str:
         try:
@@ -1491,12 +1808,6 @@ Generate production-ready FreeCAD Python code that creates a professional {model
             cleaned_code = re.sub(r'FreeCAD[.]Units[.]setPreferredUnitSystem[(].*?[)]', '', cleaned_code)
             cleaned_code = re.sub(r'FreeCAD[.]Units[.]setUnitSystem[(].*?[)]', '', cleaned_code)  # Fix for setUnitSystem
             cleaned_code = re.sub(r'Units[.]setUnitSystem[(].*?[)]', '', cleaned_code)  # Fix for Units.setUnitSystem
-            
-            # Remove import Part since we only use Draft for 2D drawings
-            cleaned_code = re.sub(r'import Part\s*\n', '', cleaned_code)
-            
-            # Fix deprecated dimension API
-            cleaned_code = self._fix_deprecated_dimension_api(cleaned_code)
             
             # Fix Part.makeBox usage that causes Label errors
             cleaned_code = self._fix_part_makebox_usage(cleaned_code)
@@ -1632,183 +1943,11 @@ Generate production-ready FreeCAD Python code that creates a professional {model
             # But fix: number.Value = something (incorrect)
             cleaned_code = re.sub(r'(\d+)[.]Value[ \t]*=', r'\1 =', cleaned_code)
             
-            # FIX INDENTATION ISSUES - CRITICAL
-            cleaned_code = self._fix_indentation(cleaned_code)
-            
             return cleaned_code
             
         except Exception as e:
             self.logger.warning(f"Code cleaning failed: {e}")
             return code
-    
-    def _fix_indentation(self, code: str) -> str:
-        """Fix broken indentation in generated code - specifically for attribute assignments"""
-        try:
-            import ast
-            
-            # Try to parse the code - if it parses, indentation is OK
-            try:
-                ast.parse(code)
-                return code  # Indentation is fine
-            except SyntaxError as e:
-                self.logger.warning(f"Indentation error detected at line {e.lineno}: {e.msg}. Attempting to fix...")
-            
-            lines = code.split('\n')
-            fixed_lines = []
-            
-            # Pattern for object property assignments that should be on same indent as object creation
-            # Example: wall.Length.Value = 200 (should follow wall = doc.addObject(...))
-            property_pattern = r'^([a-zA-Z_]\w*)[.]\w+([.]Value)?\s*=\s*.+'
-            
-            i = 0
-            while i < len(lines):
-                line = lines[i]
-                
-                # Check if this line is an unindented property assignment
-                if re.match(property_pattern, line.strip()) and not line.startswith((' ', '\t')):
-                    # This is a property assignment at column 0 - needs indentation
-                    # Look back to find the proper indent level
-                    indent_to_use = ''
-                    
-                    # Look at previous non-empty line to get indent
-                    for j in range(i - 1, -1, -1):
-                        prev_line = lines[j]
-                        if prev_line.strip():
-                            # Get the indentation of the previous line
-                            indent_match = re.match(r'^(\s*)', prev_line)
-                            if indent_match:
-                                prev_indent = indent_match.group(1)
-                                # If previous line is object creation or assignment, use same indent
-                                if '=' in prev_line or prev_line.strip().endswith(':'):
-                                    if prev_line.strip().endswith(':'):
-                                        # Increase indent for block
-                                        indent_to_use = prev_indent + '    '
-                                    else:
-                                        # Same indent as previous assignment
-                                        indent_to_use = prev_indent
-                                else:
-                                    # Use same indent as previous line
-                                    indent_to_use = prev_indent
-                            break
-                    
-                    # Apply the indentation
-                    fixed_lines.append(indent_to_use + line.strip())
-                else:
-                    # Keep line as is
-                    fixed_lines.append(line)
-                
-                i += 1
-            
-            fixed_code = '\n'.join(fixed_lines)
-            
-            # Try to parse the fixed code
-            try:
-                ast.parse(fixed_code)
-                self.logger.info("Indentation fixed successfully")
-                return fixed_code
-            except SyntaxError as e2:
-                # Still broken, try a more aggressive fix
-                self.logger.warning(f"First fix attempt failed: {e2}. Trying aggressive fix...")
-                return self._aggressive_indent_fix(code)
-                
-        except Exception as e:
-            self.logger.error(f"Error fixing indentation: {e}")
-            return code
-    
-    def _aggressive_indent_fix(self, code: str) -> str:
-        """More aggressive indentation fix using heuristics"""
-        try:
-            lines = code.split('\n')
-            fixed_lines = []
-            current_indent = 0
-            base_indent = '    '  # 4 spaces
-            
-            for i, line in enumerate(lines):
-                stripped = line.strip()
-                
-                # Skip empty lines
-                if not stripped:
-                    fixed_lines.append('')
-                    continue
-                
-                # Detect if we need to decrease indent
-                if stripped.startswith(('else:', 'elif ', 'except:', 'except ', 'finally:', 'def ', 'class ')):
-                    if current_indent > 0:
-                        current_indent -= 1
-                
-                # Detect dedent patterns (closing blocks)
-                if i > 0:
-                    prev_stripped = lines[i-1].strip()
-                    # If previous line was a single statement (return, pass, etc), we might need to dedent
-                    if prev_stripped.startswith(('return ', 'break', 'continue', 'pass', 'raise ')):
-                        # Check if current line is not a continuation of the block
-                        if not stripped.startswith((' ', '\t')) and not stripped.startswith(('else:', 'elif ', 'except:', 'finally:')):
-                            current_indent = max(0, current_indent - 1)
-                
-                # Apply current indentation
-                fixed_line = (base_indent * current_indent) + stripped
-                fixed_lines.append(fixed_line)
-                
-                # Detect if we need to increase indent for next line
-                if stripped.endswith(':'):
-                    current_indent += 1
-            
-            fixed_code = '\n'.join(fixed_lines)
-            
-            # Validate
-            import ast
-            try:
-                ast.parse(fixed_code)
-                self.logger.info("Aggressive indentation fix successful")
-                return fixed_code
-            except SyntaxError:
-                self.logger.error("Could not fix indentation. Returning original code.")
-                return code
-                
-        except Exception as e:
-            self.logger.error(f"Aggressive indent fix failed: {e}")
-            return code
-    
-    def _fix_deprecated_dimension_api(self, code: str) -> str:
-        """Fix deprecated Draft.makeDimension() to modern Draft.make_linear_dimension()"""
-        
-        # Pattern to find old dimension API with 3 parameters
-        # Old: Draft.makeDimension(p1, p2, p3)
-        # New: Draft.make_linear_dimension(p1, p2)
-        
-        pattern = r'(\w+)\s*=\s*Draft\.makeDimension\(\s*FreeCAD\.Vector\(([^)]+)\),\s*FreeCAD\.Vector\(([^)]+)\),\s*FreeCAD\.Vector\(([^)]+)\)\s*\)'
-        
-        def replace_dimension(match):
-            var_name = match.group(1)
-            p1_coords = match.group(2)
-            p2_coords = match.group(3)
-            # p3 (text position) is ignored in new API
-            
-            replacement = f"{var_name} = Draft.make_linear_dimension(FreeCAD.Vector({p1_coords}), FreeCAD.Vector({p2_coords}))"
-            return replacement
-        
-        fixed_code = re.sub(pattern, replace_dimension, code)
-        
-        # Also fix simpler patterns
-        fixed_code = re.sub(r'Draft\.makeDimension\s*\(', 'Draft.make_linear_dimension(', fixed_code)
-        
-        # Fix ViewObjectdim1, ViewObjectdim2 type errors (no space after ViewObject)
-        # Pattern: dim1.ViewObjectdim1.ViewObject.FontSize or dim1.ViewObjectdim2.ViewObject.FontSize
-        fixed_code = re.sub(r'(\w+)\.ViewObject(\w+)\.ViewObject\.', r'\1.ViewObject.', fixed_code)
-        
-        # Fix pattern where there's no newline after ViewObject assignment
-        # Pattern: dim1.ViewObjectdim2 = Draft... should be dim1.ViewObject\ndim2 = Draft...
-        fixed_code = re.sub(r'(\w+)\.ViewObject(\w+)\s*=\s*Draft', r'\1.ViewObject\n\2 = Draft', fixed_code)
-        
-        # Fix ViewObject concatenation without proper spacing (e.g., "ViewObject    grid_line.ViewObject")
-        # Pattern 1: variable.ViewObject    variable.ViewObject.property = value
-        fixed_code = re.sub(r'(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject\.', r'\1.ViewObject.\n    \2.ViewObject.', fixed_code)
-        
-        # Pattern 2: More aggressive - any ViewObject followed by multiple spaces then another variable
-        fixed_code = re.sub(r'\.ViewObject(\s{2,})(\w+)\.ViewObject', r'.ViewObject\n    \2.ViewObject', fixed_code)
-        
-        self.logger.info("Fixed deprecated dimension API calls and ViewObject errors")
-        return fixed_code
     
     def _fix_part_makebox_usage(self, code: str) -> str:
         """Fix Part.makeBox usage that causes Label errors"""
@@ -1920,244 +2059,6 @@ Generate production-ready FreeCAD Python code that creates a professional {model
         except:
             return vector_expression
     
-    def _contains_3d_objects(self, code: str) -> bool:
-        """Check if code contains 3D objects instead of 2D drawings"""
-        # Patterns that indicate 3D objects
-        three_d_patterns = [
-            r'Part\.makeBox',
-            r'Part\.makeCylinder',
-            r'Part\.makeSphere',
-            r'Part\.makeCone',
-            r'doc\.addObject\(["\']Part::Box',
-            r'doc\.addObject\(["\']Part::Cylinder',
-            r'doc\.addObject\(["\']Part::Sphere',
-            r'doc\.addObject\(["\']Part::Cone',
-            r'\.Length\.Value\s*=',  # 3D box properties
-            r'\.Width\.Value\s*=',
-            r'\.Height\.Value\s*=',
-        ]
-        
-        for pattern in three_d_patterns:
-            if re.search(pattern, code):
-                self.logger.warning(f"Found 3D object pattern: {pattern}")
-                return True
-        
-        return False
-    
-    def _has_sufficient_complexity(self, code: str) -> bool:
-        """Check if generated code meets professional blueprint standards"""
-        if not code:
-            return False
-            
-        # Count ALL Draft line commands (must have MANY for detailed drawing)
-        draft_lines = len(re.findall(r'Draft\.makeLine', code))
-        draft_wires = len(re.findall(r'Draft\.makeWire', code))
-        draft_rectangles = len(re.findall(r'Draft\.makeRectangle', code))
-        draft_circles = len(re.findall(r'Draft\.makeCircle', code))
-        total_drawing_commands = draft_lines + draft_wires + draft_rectangles + draft_circles
-        
-        # Count dimensions (MUST show all measurements) - check both old and new API
-        dimensions_modern = len(re.findall(r'Draft\.make_linear_dimension', code))
-        dimensions_old = len(re.findall(r'Draft\.makeDimension', code))
-        dimensions = dimensions_modern + dimensions_old
-        
-        # Warn if using deprecated API
-        if dimensions_old > 0:
-            self.logger.warning(f"⚠️ Code uses DEPRECATED Draft.makeDimension() - should use Draft.make_linear_dimension()")
-        
-        # Count text labels (MUST label all components) - check both old and new API
-        labels_old = len(re.findall(r'Draft\.makeText', code))
-        labels_new = len(re.findall(r'Draft\.make_text', code))
-        labels = labels_old + labels_new
-        
-        # Check for multiple views (MANDATORY: Front, Top, Side)
-        view_keywords = ['# FRONT', '# TOP', '# SIDE', '# SECTION', '# PROJECTION', 'elevation', 'floor_plan', 'section']
-        view_count = sum(1 for keyword in view_keywords if keyword.lower() in code.lower())
-        
-        # Check for grid system
-        has_grid = 'grid' in code.lower() and ('Draft.makeLine' in code or 'grid_line' in code.lower())
-        
-        self.logger.info(f"Blueprint Quality Check:")
-        self.logger.info(f"  - Drawing commands: {total_drawing_commands} (Lines: {draft_lines}, Wires: {draft_wires}, Rects: {draft_rectangles}, Circles: {draft_circles})")
-        self.logger.info(f"  - Dimensions: {dimensions}")
-        self.logger.info(f"  - Labels: {labels}")
-        self.logger.info(f"  - Views detected: {view_count}")
-        self.logger.info(f"  - Grid system: {has_grid}")
-        
-        # REQUIREMENTS for professional blueprints (adjusted for template capabilities)
-        if total_drawing_commands < 15:
-            self.logger.warning(f"❌ INSUFFICIENT DETAIL: Only {total_drawing_commands} drawing commands (need minimum 15 for complex drawings)")
-            return False
-        
-        if dimensions < 4:
-            self.logger.warning(f"❌ MISSING DIMENSIONS: Only {dimensions} dimensions (need minimum 4 to show all measurements)")
-            return False
-            
-        if labels < 4:
-            self.logger.warning(f"❌ MISSING LABELS: Only {labels} labels (need minimum 4 for component identification)")
-            return False
-        
-        if view_count < 2:
-            self.logger.warning(f"❌ SINGLE VIEW ONLY: Detected {view_count} views (need minimum 3: Front, Top, Side)")
-            return False
-        
-        if not has_grid:
-            self.logger.warning(f"❌ NO GRID SYSTEM: Professional blueprints require coordinate grid (A-F, 1-6)")
-            return False
-        
-        self.logger.info("✅ Blueprint quality check PASSED - generating professional multi-view technical drawing")
-        return True
-    
-    def _regenerate_as_2d_only(self, command: str, model_type: str = "2D") -> str:
-        """Regenerate code with ABSOLUTE emphasis on professional blueprint standards"""
-        try:
-            # Add EXTREME 2D blueprint emphasis to the prompt
-            enhanced_prompt = f"""
-{command}
-
-🎯 GENERATE PROFESSIONAL MULTI-VIEW BLUEPRINT - 2D TECHNICAL DRAWING ONLY
-
-MANDATORY STRUCTURE (YOUR OUTPUT WILL BE REJECTED IF MISSING ANY):
-=====================================================================
-1. FRONT VIEW - Primary orthographic projection showing façade
-2. TOP VIEW - Bird's eye floor plan showing layout from above  
-3. SIDE/PROJECTION VIEW - Profile view showing depth and height
-4. MINIMUM 30 Draft.makeLine() commands for detailed drawings
-5. MINIMUM 8 Draft.makeDimension() calls showing ALL measurements
-6. MINIMUM 8 Draft.makeText() labels identifying every component
-7. Grid system with letters (A-F) and numbers (1-6)
-8. Title block with drawing name, scale, date
-
-EXAMPLE BLUEPRINT STRUCTURE YOU MUST FOLLOW:
-```python
-import FreeCAD
-import Draft
-
-doc = FreeCAD.newDocument("Blueprint")
-
-# === FRONT VIEW (y_offset = 0) ===
-# Perimeter outline
-front_outline = Draft.makeWire([
-    FreeCAD.Vector(0, 0, 0),
-    FreeCAD.Vector(5000, 0, 0),
-    FreeCAD.Vector(5000, 2400, 0),
-    FreeCAD.Vector(0, 2400, 0),
-    FreeCAD.Vector(0, 0, 0)
-], closed=True)
-front_outline.ViewObject.LineWidth = 3.0
-
-# Internal details (doors, windows, compartments)
-door1 = Draft.makeLine(FreeCAD.Vector(1000, 0, 0), FreeCAD.Vector(1900, 0, 0))
-door1.ViewObject.LineWidth = 2.0
-
-window1 = Draft.makeRectangle(800, 1200, placement=FreeCAD.Placement(FreeCAD.Vector(3000, 1000, 0), FreeCAD.Rotation(0, 0, 0)))
-window1.ViewObject.LineWidth = 1.5
-
-# Dimensions - MODERN API (FreeCAD 0.21+)
-dim1 = Draft.make_linear_dimension(
-    FreeCAD.Vector(0, -500, 0),
-    FreeCAD.Vector(5000, -500, 0)
-)
-dim1.ViewObject.LineColor = (0.0, 0.0, 0.0)
-dim1.ViewObject.FontSize = 300
-
-# === TOP VIEW (y_offset = 10000) ===
-# Floor plan with rooms, furniture, fixtures
-# ... minimum 15 lines showing plan details
-
-# === SIDE VIEW (y_offset = 20000) ===
-# Profile projection showing depth
-# ... minimum 10 lines showing profile
-
-# === GRID SYSTEM ===
-# Grid lines every 1000mm with A,B,C labels
-
-# === TITLE BLOCK ===
-# Drawing name, scale, date
-```
-
-⚠️ ABSOLUTELY FORBIDDEN (INSTANT REJECTION):
-- Part.makeBox() or ANY Part.* commands
-- doc.addObject("Part::*")
-- Simple single rectangle (too basic!)
-- Missing views (need all 3: front, top, side)
-- Missing dimensions (every measurement must be shown)
-- Missing grid system
-
-✅ ONLY USE THESE 2D COMMANDS:
-- Draft.makeLine(start_vec, end_vec)
-- Draft.makeWire(points_list, closed=True)
-- Draft.makeRectangle(length, height, placement)
-- Draft.makeCircle(radius, placement)
-- Draft.makeDimension(p1, p2, p3)
-- Draft.makeText(text_list, point)
-
-Generate CONSTRUCTION-READY professional blueprint with ALL views, dimensions, labels!
-"""
-            
-            self.logger.info("Regenerating with 2D-only emphasis...")
-            
-            # Call AI with enhanced prompt (provider-aware)
-            if self.provider == 'gemini':
-                try:
-                    response = self.client.generate_content(
-                        enhanced_prompt,
-                        generation_config=genai.types.GenerationConfig(
-                            temperature=0.3,
-                            max_output_tokens=8000,
-                        ),
-                        safety_settings=[
-                            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                        ]
-                    )
-                    generated_code = response.text if response and hasattr(response, 'text') else ""
-                except Exception as e:
-                    self.logger.error(f"Gemini regeneration failed: {e}, falling back to template")
-                    # Use intelligent template when Gemini is blocked
-                    return self._create_intelligent_template(command)
-            else:  # groq
-                response = self.client.chat.completions.create(
-                    model=self.config.groq.model,
-                    messages=[
-                        {"role": "system", "content": self._get_system_prompt()},
-                        {"role": "user", "content": enhanced_prompt}
-                    ],
-                    max_tokens=8000,
-                    temperature=0.3
-                )
-                generated_code = response.choices[0].message.content if response.choices else ""
-            
-            if generated_code:
-                cleaned_code = self._clean_generated_code(generated_code)
-                
-                # Check again
-                if self._contains_3d_objects(cleaned_code):
-                    self.logger.error("AI still generated 3D objects after regeneration!")
-                    # Return a minimal 2D example as fallback
-                    return self._create_minimal_2d_example(command)
-                
-                return cleaned_code
-            else:
-                return self._create_minimal_2d_example(command)
-                
-        except Exception as e:
-            self.logger.error(f"Regeneration failed: {e}")
-            return self._create_minimal_2d_example(command)
-    
-    def _convert_3d_to_2d(self, code: str) -> str:
-        """Convert 3D code to 2D technical drawings - just return None to force regeneration"""
-        # Conversion is too complex and unreliable
-        # Better to regenerate from scratch with proper 2D emphasis
-        self.logger.warning("3D code detected - will force complete 2D regeneration")
-        return None
-    
-    def _create_minimal_2d_example(self, command: str) -> str:
-        """Create a minimal 2D drawing example - NOT USED ANYMORE"""
-        return None  # Force proper generation instead
-    
     def _validate_freecad_code(self, code: str) -> bool:
         """
         Validate generated FreeCAD code for common issues
@@ -2216,8 +2117,8 @@ Generate CONSTRUCTION-READY professional blueprint with ALL views, dimensions, l
             self.logger.error(f"Code validation failed: {e}")
             return False
     
-    def _create_simple_bhk_model(self) -> str:
-        """Create a structured architectural house model with proper room layout"""
+    def _create_simple_two_bhk_model(self) -> str:
+        """Create a structured architectural 2BHK house model with proper room layout"""
         return '''import FreeCAD
 import Part
 import Draft

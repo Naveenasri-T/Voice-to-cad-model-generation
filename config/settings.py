@@ -25,8 +25,17 @@ class AudioConfig:
     bit_depth: int = 16
 
 @dataclass
+class GeminiConfig:
+    """Gemini AI configuration"""
+    api_key: str = ""
+    model: str = "models/gemini-2.5-flash"
+    temperature: float = 0.3
+    max_tokens: int = 2048
+    timeout: int = 60
+
+@dataclass
 class GroqConfig:
-    """Groq AI configuration"""
+    """Groq AI configuration (legacy support)"""
     api_key: str = ""
     model: str = "llama-3.3-70b-versatile"
     temperature: float = 0.3
@@ -37,10 +46,12 @@ class GroqConfig:
 class AIConfig:
     """AI service configuration"""
     api_key: Optional[str] = None
-    model_name: str = 'llama-3.3-70b-versatile'
+    model_name: str = 'models/gemini-2.5-flash'
     max_tokens: int = 8000
     temperature: float = 0.1
     timeout: int = 30
+    provider: str = 'groq'  # 'gemini' or 'groq'
+    gemini: GeminiConfig = field(default_factory=GeminiConfig)
     groq: GroqConfig = field(default_factory=GroqConfig)
 
 @dataclass
@@ -150,7 +161,15 @@ class ConfigurationManager:
         config = Config()
         
         # Override with environment variables
+        config.ai.gemini.api_key = os.getenv('GOOGLE_API_KEY', '')
         config.ai.groq.api_key = os.getenv('GROQ_API_KEY', '')
+        
+        # Set provider based on which API key is available (prefer Gemini - higher limits)
+        if config.ai.gemini.api_key:
+            config.ai.provider = 'gemini'
+        elif config.ai.groq.api_key:
+            config.ai.provider = 'groq'
+            
         config.debug = os.getenv('DEBUG', 'false').lower() == 'true'
         config.log_level = os.getenv('LOG_LEVEL', 'INFO')
         config.environment = os.getenv('ENVIRONMENT', 'production')
@@ -187,9 +206,18 @@ class ConfigurationManager:
         """Reload configuration from environment"""
         self._load_config()
     
+    def update_api_key(self, api_key: str, provider: str = 'gemini') -> None:
+        """Update API key for specified provider"""
+        if provider == 'gemini':
+            self._config.ai.gemini.api_key = api_key
+            self._config.ai.provider = 'gemini'
+        elif provider == 'groq':
+            self._config.ai.groq.api_key = api_key
+            self._config.ai.provider = 'groq'
+    
     def update_groq_api_key(self, api_key: str) -> None:
-        """Update Groq API key"""
-        self._config.ai.groq.api_key = api_key
+        """Update Groq API key (legacy support)"""
+        self.update_api_key(api_key, 'groq')
     
     def get_freecad_path(self) -> Optional[str]:
         """Get FreeCAD installation path"""
@@ -210,8 +238,12 @@ class ConfigurationManager:
         issues = []
         warnings = []
         
-        # Check Groq API key
-        if not self._config.ai.groq.api_key:
+        # Check AI API keys
+        if not self._config.ai.gemini.api_key and not self._config.ai.groq.api_key:
+            issues.append("No AI API key is configured (neither Gemini nor Groq)")
+        elif self._config.ai.provider == 'gemini' and not self._config.ai.gemini.api_key:
+            issues.append("Gemini API key is not configured")
+        elif self._config.ai.provider == 'groq' and not self._config.ai.groq.api_key:
             issues.append("Groq API key is not configured")
         
         # Check FreeCAD path
