@@ -164,11 +164,11 @@ class ConfigurationManager:
         config.ai.gemini.api_key = os.getenv('GOOGLE_API_KEY', '')
         config.ai.groq.api_key = os.getenv('GROQ_API_KEY', '')
         
-        # Set provider based on which API key is available (prefer Gemini - higher limits)
-        if config.ai.gemini.api_key:
-            config.ai.provider = 'gemini'
-        elif config.ai.groq.api_key:
+        # Set provider based on which API key is available (prefer Groq for voice transcription)
+        if config.ai.groq.api_key:
             config.ai.provider = 'groq'
+        elif config.ai.gemini.api_key:
+            config.ai.provider = 'gemini'
             
         config.debug = os.getenv('DEBUG', 'false').lower() == 'true'
         config.log_level = os.getenv('LOG_LEVEL', 'INFO')

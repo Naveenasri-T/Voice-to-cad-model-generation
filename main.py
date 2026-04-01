@@ -9,7 +9,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 st.set_page_config(
-    page_title="Voice to Blueprint Generator", 
+    page_title="Voice to CAD Model Generation", 
     page_icon="📐", 
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -81,7 +81,7 @@ def main():
     # Header
     st.markdown("""
     <div class="main-header">
-        <h1>📐 Voice to Blueprint Generator</h1>
+        <h1>📐 Voice to CAD Model Generation</h1>
         <p style="margin: 0; font-size: 1.1rem;">AI-Powered 2D Floor Plans & Technical Drawings with Voice Commands</p>
     </div>
     """, unsafe_allow_html=True)
@@ -468,7 +468,7 @@ def main():
     st.markdown("""
     <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
         <p style="margin: 0; color: #6c757d;">
-            📐 <strong>Voice to Blueprint Generator</strong> - AI-Powered 2D Floor Plans & Technical Drawings
+            📐 <strong>Voice to CAD Model Generation</strong> - AI-Powered 2D Floor Plans & Technical Drawings
             <br>💡 Speak or type your ideas, get professional blueprints & sketches
         </p>
     </div>

@@ -306,9 +306,7 @@ class AIService:
                     return self._regenerate_as_2d_only(command, model_type)
                 
                 # Check if output is too simple (just basic rectangle)
-                # Skip complexity check for template-generated code
-                is_template = "# TEMPLATE_GENERATED" in cleaned_code
-                if cleaned_code and not is_template and not self._has_sufficient_complexity(cleaned_code):
+                if cleaned_code and not self._has_sufficient_complexity(cleaned_code):
                     self.logger.error("Generated code is too simple! Regenerating with complexity requirement...")
                     return self._regenerate_as_2d_only(command, model_type)
                 
@@ -370,20 +368,12 @@ class AIService:
                 if response and hasattr(response, 'text') and response.text:
                     # Post-process the generic response to make it FreeCAD-specific
                     return self._adapt_generic_code_to_freecad(response.text, prompt)
-                else:
-                    self.logger.warning("Gemini returned empty or blocked response, using template")
-                    return self._create_intelligent_template(prompt)
                     
             except Exception as e:
-                self.logger.warning(f"Generic Gemini approach failed: {e}, using template")
-                # Use intelligent template when Gemini is blocked
-                # Mark this as template-generated to skip complexity check
-                template_code = self._create_intelligent_template(prompt)
-                return "# TEMPLATE_GENERATED\n" + template_code
+                self.logger.warning(f"Generic Gemini approach failed: {e}")
             
             # If all AI approaches fail, use intelligent template matching
-            template_code = self._create_intelligent_template(prompt)
-            return "# TEMPLATE_GENERATED\n" + template_code
+            return self._create_intelligent_template(prompt)
             
         except Exception as e:
             self.logger.error(f"Gemini generation completely failed: {e}")
@@ -420,139 +410,94 @@ class AIService:
                     break
         
         return f'''import FreeCAD
-import Draft
+import Part
 
-doc = FreeCAD.newDocument("{room_count}BHK_House_Blueprint")
+# Create new document
+doc = FreeCAD.newDocument("House_Model")
 
-# === FRONT VIEW (y_offset = 0) ===
-front_outline = Draft.makeWire([
-    FreeCAD.Vector(0, 0, 0),
-    FreeCAD.Vector(12000, 0, 0),
-    FreeCAD.Vector(12000, 3000, 0),
-    FreeCAD.Vector(0, 3000, 0),
-    FreeCAD.Vector(0, 0, 0)
-], closed=True)
-front_outline.ViewObject.LineWidth = 3.0
+# House dimensions (in millimeters)
+house_length = 10000  # 10 meters
+house_width = 8000    # 8 meters
+wall_height = 3000    # 3 meters
+wall_thickness = 200  # 200mm
 
-# Doors and windows
-door1 = Draft.makeLine(FreeCAD.Vector(1000, 0, 0), FreeCAD.Vector(1900, 0, 0))
-door1.ViewObject.LineWidth = 2.0
-window1 = Draft.makeRectangle(800, 1200, placement=FreeCAD.Placement(FreeCAD.Vector(3000, 800, 0), FreeCAD.Rotation(0, 0, 0)))
-window1.ViewObject.LineWidth = 1.5
-window2 = Draft.makeRectangle(800, 1200, placement=FreeCAD.Placement(FreeCAD.Vector(8000, 800, 0), FreeCAD.Rotation(0, 0, 0)))
-window2.ViewObject.LineWidth = 1.5
+# Create foundation
+foundation = doc.addObject("Part::Box", "Foundation")
+foundation.Length = house_length
+foundation.Width = house_width
+foundation.Height = 300
+foundation.Placement.Base = FreeCAD.Vector(0, 0, 0)
 
-# Dimensions
-dim1 = Draft.make_linear_dimension(FreeCAD.Vector(0, -500, 0), FreeCAD.Vector(12000, -500, 0))
-dim1.ViewObject.FontSize = 300
-dim2 = Draft.make_linear_dimension(FreeCAD.Vector(-500, 0, 0), FreeCAD.Vector(-500, 3000, 0))
-dim2.ViewObject.FontSize = 300
+# Create exterior walls
+# Front wall
+front_wall = doc.addObject("Part::Box", "FrontWall")
+front_wall.Length = house_length
+front_wall.Width = wall_thickness
+front_wall.Height = wall_height
+front_wall.Placement.Base = FreeCAD.Vector(0, 0, 300)
 
-# === TOP VIEW (y_offset = 5000) ===
-top_outline = Draft.makeWire([
-    FreeCAD.Vector(0, 5000, 0),
-    FreeCAD.Vector(12000, 5000, 0),
-    FreeCAD.Vector(12000, 13000, 0),
-    FreeCAD.Vector(0, 13000, 0),
-    FreeCAD.Vector(0, 5000, 0)
-], closed=True)
-top_outline.ViewObject.LineWidth = 3.0
+# Back wall
+back_wall = doc.addObject("Part::Box", "BackWall")
+back_wall.Length = house_length
+back_wall.Width = wall_thickness
+back_wall.Height = wall_height
+back_wall.Placement.Base = FreeCAD.Vector(0, house_width - wall_thickness, 300)
 
-# Rooms
-living_room = Draft.makeRectangle(5000, 4000, placement=FreeCAD.Placement(FreeCAD.Vector(1000, 6000, 0), FreeCAD.Rotation(0, 0, 0)))
-living_room.ViewObject.LineWidth = 1.5
-living_label = Draft.make_text(["Living Room"], placement=FreeCAD.Placement(FreeCAD.Vector(2500, 7500, 0), FreeCAD.Rotation(0, 0, 0)))
-living_label.ViewObject.FontSize = 200
+# Left wall
+left_wall = doc.addObject("Part::Box", "LeftWall")
+left_wall.Length = wall_thickness
+left_wall.Width = house_width
+left_wall.Height = wall_height
+left_wall.Placement.Base = FreeCAD.Vector(0, 0, 300)
 
-kitchen = Draft.makeRectangle(3000, 3000, placement=FreeCAD.Placement(FreeCAD.Vector(7000, 6000, 0), FreeCAD.Rotation(0, 0, 0)))
-kitchen.ViewObject.LineWidth = 1.5
-kitchen_label = Draft.make_text(["Kitchen"], placement=FreeCAD.Placement(FreeCAD.Vector(7800, 7200, 0), FreeCAD.Rotation(0, 0, 0)))
-kitchen_label.ViewObject.FontSize = 200
+# Right wall
+right_wall = doc.addObject("Part::Box", "RightWall")
+right_wall.Length = wall_thickness
+right_wall.Width = house_width
+right_wall.Height = wall_height
+right_wall.Placement.Base = FreeCAD.Vector(house_length - wall_thickness, 0, 300)
 
-bedroom1 = Draft.makeRectangle(4000, 3000, placement=FreeCAD.Placement(FreeCAD.Vector(1000, 10000, 0), FreeCAD.Rotation(0, 0, 0)))
-bedroom1.ViewObject.LineWidth = 1.5
-bed1_label = Draft.make_text(["Bedroom 1"], placement=FreeCAD.Placement(FreeCAD.Vector(2200, 11000, 0), FreeCAD.Rotation(0, 0, 0)))
-bed1_label.ViewObject.FontSize = 200
+# Create interior partitions for {room_count} bedrooms
+for i in range({room_count}):
+    partition = doc.addObject("Part::Box", f"Partition_{{i+1}}")
+    partition.Length = house_length // 2
+    partition.Width = wall_thickness
+    partition.Height = wall_height
+    partition.Placement.Base = FreeCAD.Vector(house_length // 4, (i + 1) * house_width // 3, 300)
 
-bedroom2 = Draft.makeRectangle(4000, 3000, placement=FreeCAD.Placement(FreeCAD.Vector(6000, 10000, 0), FreeCAD.Rotation(0, 0, 0)))
-bedroom2.ViewObject.LineWidth = 1.5
-bed2_label = Draft.make_text(["Bedroom 2"], placement=FreeCAD.Placement(FreeCAD.Vector(7200, 11000, 0), FreeCAD.Rotation(0, 0, 0)))
-bed2_label.ViewObject.FontSize = 200
+# Create roof
+roof = doc.addObject("Part::Box", "Roof")
+roof.Length = house_length
+roof.Width = house_width
+roof.Height = 200
+roof.Placement.Base = FreeCAD.Vector(0, 0, wall_height + 300)
 
-# Dimensions
-dim3 = Draft.make_linear_dimension(FreeCAD.Vector(0, 4500, 0), FreeCAD.Vector(12000, 4500, 0))
-dim3.ViewObject.FontSize = 300
-dim4 = Draft.make_linear_dimension(FreeCAD.Vector(-500, 5000, 0), FreeCAD.Vector(-500, 13000, 0))
-dim4.ViewObject.FontSize = 300
-
-# === SIDE VIEW (y_offset = 15000) ===
-side_outline = Draft.makeWire([
-    FreeCAD.Vector(0, 15000, 0),
-    FreeCAD.Vector(8000, 15000, 0),
-    FreeCAD.Vector(8000, 18000, 0),
-    FreeCAD.Vector(0, 18000, 0),
-    FreeCAD.Vector(0, 15000, 0)
-], closed=True)
-side_outline.ViewObject.LineWidth = 3.0
-
-# Dimensions
-dim5 = Draft.make_linear_dimension(FreeCAD.Vector(0, 14500, 0), FreeCAD.Vector(8000, 14500, 0))
-dim5.ViewObject.FontSize = 300
-dim6 = Draft.make_linear_dimension(FreeCAD.Vector(-500, 15000, 0), FreeCAD.Vector(-500, 18000, 0))
-dim6.ViewObject.FontSize = 300
-
-# === GRID SYSTEM ===
-for i in range(0, 13000, 2000):
-    grid_h = Draft.makeLine(FreeCAD.Vector(i, 0, 0), FreeCAD.Vector(i, 18000, 0))
-    grid_h.ViewObject.LineWidth = 0.3
-    # LineStyle "Dotted" not supported, using thin line instead
-    label = Draft.make_text([chr(65 + i//2000)], placement=FreeCAD.Placement(FreeCAD.Vector(i, -700, 0), FreeCAD.Rotation(0, 0, 0)))
-    label.ViewObject.FontSize = 200
-
-for i in range(0, 18000, 2000):
-    grid_v = Draft.makeLine(FreeCAD.Vector(0, i, 0), FreeCAD.Vector(12000, i, 0))
-    grid_v.ViewObject.LineWidth = 0.3
-    # LineStyle "Dotted" not supported, using thin line instead
-
-# === TITLE BLOCK ===
-title = Draft.make_text(["{room_count}BHK House Blueprint", "Scale: 1:100", "Date: 2025-11-30"], placement=FreeCAD.Placement(FreeCAD.Vector(9000, -1200, 0), FreeCAD.Rotation(0, 0, 0)))
-title.ViewObject.FontSize = 250
-
+# Recompute and fit view
 doc.recompute()
 if hasattr(FreeCAD, 'Gui'):
     FreeCAD.Gui.SendMsgToActiveView("ViewFit")
-    FreeCAD.Gui.activeDocument().activeView().viewTop()
+    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
 '''
     
     def _generate_cube_template(self, prompt: str) -> str:
         return '''import FreeCAD
-import Draft
+import Part
 
-doc = FreeCAD.newDocument("Cube_Blueprint")
+# Create new document
+doc = FreeCAD.newDocument("Cube_Model")
 
-# Front View
-front = Draft.makeRectangle(100, 100)
-front.ViewObject.LineWidth = 2.0
-dim1 = Draft.make_linear_dimension(FreeCAD.Vector(0, -20, 0), FreeCAD.Vector(100, -20, 0))
-dim1.ViewObject.FontSize = 200
+# Create a cube
+cube = doc.addObject("Part::Box", "Cube")
+cube.Length = 100  # 100mm
+cube.Width = 100   # 100mm
+cube.Height = 100  # 100mm
+cube.Placement.Base = FreeCAD.Vector(0, 0, 0)
 
-# Top View  
-top = Draft.makeRectangle(100, 100, placement=FreeCAD.Placement(FreeCAD.Vector(150, 0, 0), FreeCAD.Rotation(0, 0, 0)))
-top.ViewObject.LineWidth = 2.0
-
-# Side View
-side = Draft.makeRectangle(100, 100, placement=FreeCAD.Placement(FreeCAD.Vector(300, 0, 0), FreeCAD.Rotation(0, 0, 0)))
-side.ViewObject.LineWidth = 2.0
-
-# Labels
-label1 = Draft.make_text(["Front"], placement=FreeCAD.Placement(FreeCAD.Vector(20, -40, 0), FreeCAD.Rotation(0, 0, 0)))
-label2 = Draft.make_text(["Top"], placement=FreeCAD.Placement(FreeCAD.Vector(170, -40, 0), FreeCAD.Rotation(0, 0, 0)))
-label3 = Draft.make_text(["Side"], placement=FreeCAD.Placement(FreeCAD.Vector(320, -40, 0), FreeCAD.Rotation(0, 0, 0)))
-
+# Recompute and fit view
 doc.recompute()
 if hasattr(FreeCAD, 'Gui'):
     FreeCAD.Gui.SendMsgToActiveView("ViewFit")
-    FreeCAD.Gui.activeDocument().activeView().viewTop()
+    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
 '''
     
     def _generate_cylinder_template(self, prompt: str) -> str:
@@ -596,30 +541,23 @@ if hasattr(FreeCAD, 'Gui'):
     
     def _generate_generic_template(self, prompt: str) -> str:
         return '''import FreeCAD
-import Draft
+import Part
 
-doc = FreeCAD.newDocument("Technical_Drawing")
+# Create new document
+doc = FreeCAD.newDocument("Generic_Model")
 
-# Front View
-front = Draft.makeRectangle(5000, 3000)
-front.ViewObject.LineWidth = 2.5
-Draft.make_text(["FRONT VIEW"], placement=FreeCAD.Placement(FreeCAD.Vector(1500, -500, 0), FreeCAD.Rotation(0, 0, 0)))
+# Create a basic object
+obj = doc.addObject("Part::Box", "BasicObject")
+obj.Length = 100
+obj.Width = 100
+obj.Height = 100
+obj.Placement.Base = FreeCAD.Vector(0, 0, 0)
 
-# Top View
-top = Draft.makeRectangle(5000, 4000, placement=FreeCAD.Placement(FreeCAD.Vector(0, 5000, 0), FreeCAD.Rotation(0, 0, 0)))
-top.ViewObject.LineWidth = 2.5
-Draft.make_text(["TOP VIEW"], placement=FreeCAD.Placement(FreeCAD.Vector(1500, 4500, 0), FreeCAD.Rotation(0, 0, 0)))
-
-# Dimensions
-dim1 = Draft.make_linear_dimension(FreeCAD.Vector(0, -800, 0), FreeCAD.Vector(5000, -800, 0))
-dim1.ViewObject.FontSize = 250
-dim2 = Draft.make_linear_dimension(FreeCAD.Vector(-800, 0, 0), FreeCAD.Vector(-800, 3000, 0))
-dim2.ViewObject.FontSize = 250
-
+# Recompute and fit view
 doc.recompute()
 if hasattr(FreeCAD, 'Gui'):
     FreeCAD.Gui.SendMsgToActiveView("ViewFit")
-    FreeCAD.Gui.activeDocument().activeView().viewTop()
+    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
 '''
     
     def _get_basic_freecad_template(self, prompt: str) -> str:
@@ -1635,6 +1573,14 @@ Generate production-ready FreeCAD Python code that creates a professional {model
             # FIX INDENTATION ISSUES - CRITICAL
             cleaned_code = self._fix_indentation(cleaned_code)
             
+            # ===== FINAL NUCLEAR CLEANUP - Last chance to fix ViewObject errors =====
+            # This is the absolute last line of defense before returning code
+            cleaned_code = self._nuclear_viewobject_fix(cleaned_code)
+            
+            # ===== FIX: Remove problematic LineStyle assignments =====
+            # LineStyle doesn't exist on all ViewObject types, causes AttributeError
+            cleaned_code = self._fix_linestyle_errors(cleaned_code)
+            
             return cleaned_code
             
         except Exception as e:
@@ -1792,23 +1738,125 @@ Generate production-ready FreeCAD Python code that creates a professional {model
         # Also fix simpler patterns
         fixed_code = re.sub(r'Draft\.makeDimension\s*\(', 'Draft.make_linear_dimension(', fixed_code)
         
-        # Fix ViewObjectdim1, ViewObjectdim2 type errors (no space after ViewObject)
-        # Pattern: dim1.ViewObjectdim1.ViewObject.FontSize or dim1.ViewObjectdim2.ViewObject.FontSize
-        fixed_code = re.sub(r'(\w+)\.ViewObject(\w+)\.ViewObject\.', r'\1.ViewObject.', fixed_code)
+        # ====== CRITICAL: Fix ViewObject errors - MOST AGGRESSIVE APPROACH ======
+        # Multiple different patterns to catch ALL variations of this bug
         
-        # Fix pattern where there's no newline after ViewObject assignment
-        # Pattern: dim1.ViewObjectdim2 = Draft... should be dim1.ViewObject\ndim2 = Draft...
+        # Pattern 1: Fix dim1.ViewObjectdim1.ViewObject.FontSize (most common)
+        fixed_code = re.sub(r'(\w+)\.ViewObject\1\.ViewObject', r'\1.ViewObject', fixed_code)
+        
+        # Pattern 2: Fix dim1.ViewObjectdim2.ViewObject (cross-variable contamination)
+        for _ in range(15):  # Very aggressive - 15 passes
+            fixed_code = re.sub(r'\.ViewObject\w+\.ViewObject', '.ViewObject', fixed_code)
+            fixed_code = re.sub(r'\.ViewObject[a-z0-9_]+\.ViewObject', '.ViewObject', fixed_code, flags=re.IGNORECASE)
+        
+        # Pattern 3: Fix missing newlines (dim1.ViewObjectdim2 = Draft...)
         fixed_code = re.sub(r'(\w+)\.ViewObject(\w+)\s*=\s*Draft', r'\1.ViewObject\n\2 = Draft', fixed_code)
         
-        # Fix ViewObject concatenation without proper spacing (e.g., "ViewObject    grid_line.ViewObject")
-        # Pattern 1: variable.ViewObject    variable.ViewObject.property = value
-        fixed_code = re.sub(r'(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject\.', r'\1.ViewObject.\n    \2.ViewObject.', fixed_code)
+        # Pattern 4: Fix whitespace concatenation (grid_line.ViewObject    grid_line.ViewObject.LineWidth)
+        fixed_code = re.sub(r'(\w+)\.ViewObject\s+(\w+)\.ViewObject', r'\1.ViewObject\n    \2.ViewObject', fixed_code)
         
-        # Pattern 2: More aggressive - any ViewObject followed by multiple spaces then another variable
-        fixed_code = re.sub(r'\.ViewObject(\s{2,})(\w+)\.ViewObject', r'.ViewObject\n    \2.ViewObject', fixed_code)
+        # Pattern 5: Nuclear option - find any line with ViewObjectXXX.ViewObject and fix it
+        lines = fixed_code.split('\n')
+        fixed_lines = []
+        for line in lines:
+            # If line contains pattern like .ViewObject<something>.ViewObject, fix it
+            if '.ViewObject' in line and line.count('.ViewObject') >= 2:
+                # Replace any .ViewObject<word>.ViewObject with just .ViewObject
+                line = re.sub(r'\.ViewObject[a-zA-Z0-9_]+\.ViewObject', '.ViewObject', line)
+            fixed_lines.append(line)
+        fixed_code = '\n'.join(fixed_lines)
         
         self.logger.info("Fixed deprecated dimension API calls and ViewObject errors")
         return fixed_code
+    
+    def _nuclear_viewobject_fix(self, code: str) -> str:
+        """
+        NUCLEAR OPTION - Final cleanup to eliminate ALL ViewObject errors
+        This is called as the very last step before code is returned
+        """
+        self.logger.info("Running nuclear ViewObject cleanup...")
+        
+        # Count how many ViewObjectdimX patterns we find
+        error_count = len(re.findall(r'\.ViewObject[a-zA-Z0-9_]+\.ViewObject', code))
+        if error_count > 0:
+            self.logger.warning(f"Found {error_count} ViewObject errors - fixing aggressively")
+        
+        # Strategy 1: Line-by-line replacement with simple string operations
+        lines = code.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            original_line = line
+            # If line has ViewObject appearing multiple times, it's probably broken
+            if '.ViewObject' in line:
+                viewobject_count = line.count('.ViewObject')
+                if viewobject_count >= 2:
+                    # Try multiple fix strategies
+                    # Pattern: dim1.ViewObjectdim1.ViewObject.FontSize
+                    line = line.replace('.ViewObjectdim1.ViewObject.', '.ViewObject.')
+                    line = line.replace('.ViewObjectdim2.ViewObject.', '.ViewObject.')
+                    line = line.replace('.ViewObjectdim3.ViewObject.', '.ViewObject.')
+                    line = line.replace('.ViewObjectdim4.ViewObject.', '.ViewObject.')
+                    line = line.replace('.ViewObjectdim5.ViewObject.', '.ViewObject.')
+                    line = line.replace('.ViewObjectdim6.ViewObject.', '.ViewObject.')
+                    line = line.replace('.ViewObjectgrid_line.ViewObject.', '.ViewObject.')
+                    line = line.replace('.ViewObjectlabel.ViewObject.', '.ViewObject.')
+                    
+                    # Fix CRITICAL syntax error: grid_line.ViewObject    grid_line.ViewObject.LineWidth
+                    # This pattern has whitespace instead of newline - causes invalid syntax
+                    if re.search(r'(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject', line):
+                        # Split the line at the whitespace gap
+                        match = re.search(r'^(\s*)(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject', line)
+                        if match:
+                            indent = match.group(1)
+                            var1 = match.group(2)
+                            var2 = match.group(3)
+                            # Split into two lines
+                            remaining = line[match.end():]
+                            cleaned_lines.append(f'{indent}{var1}.ViewObject')
+                            line = f'{indent}{var2}.ViewObject{remaining}'
+                            self.logger.info(f"Split whitespace error: {original_line.strip()[:60]}...")
+                    
+                    # Generic pattern with regex as backup
+                    line = re.sub(r'\.ViewObject[a-zA-Z0-9_]+\.ViewObject', '.ViewObject', line)
+                    
+                    if original_line != line:
+                        self.logger.info(f"Fixed line: {original_line.strip()[:60]}... -> {line.strip()[:60]}...")
+            
+            cleaned_lines.append(line)
+        
+        return '\n'.join(cleaned_lines)
+    
+    def _fix_linestyle_errors(self, code: str) -> str:
+        """
+        Fix LineStyle attribute errors - LineStyle doesn't exist on all ViewObject types
+        Wrap LineStyle assignments in try-except to prevent crashes
+        """
+        self.logger.info("Wrapping LineStyle assignments in try-except...")
+        
+        lines = code.split('\n')
+        fixed_lines = []
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i]
+            # Check if this line sets LineStyle
+            if '.ViewObject.LineStyle' in line:
+                # Get the indentation
+                indent = len(line) - len(line.lstrip())
+                indent_str = ' ' * indent
+                
+                # Wrap in try-except
+                fixed_lines.append(f'{indent_str}try:')
+                fixed_lines.append(f'{indent_str}    {line.strip()}')
+                fixed_lines.append(f'{indent_str}except AttributeError:')
+                fixed_lines.append(f'{indent_str}    pass  # LineStyle not supported on this object')
+                
+                self.logger.info(f"Wrapped LineStyle: {line.strip()[:60]}")
+            else:
+                fixed_lines.append(line)
+            i += 1
+        
+        return '\n'.join(fixed_lines)
     
     def _fix_part_makebox_usage(self, code: str) -> str:
         """Fix Part.makeBox usage that causes Label errors"""
@@ -1965,10 +2013,8 @@ Generate production-ready FreeCAD Python code that creates a professional {model
         if dimensions_old > 0:
             self.logger.warning(f"⚠️ Code uses DEPRECATED Draft.makeDimension() - should use Draft.make_linear_dimension()")
         
-        # Count text labels (MUST label all components) - check both old and new API
-        labels_old = len(re.findall(r'Draft\.makeText', code))
-        labels_new = len(re.findall(r'Draft\.make_text', code))
-        labels = labels_old + labels_new
+        # Count text labels (MUST label all components)
+        labels = len(re.findall(r'Draft\.makeText', code))
         
         # Check for multiple views (MANDATORY: Front, Top, Side)
         view_keywords = ['# FRONT', '# TOP', '# SIDE', '# SECTION', '# PROJECTION', 'elevation', 'floor_plan', 'section']
@@ -1984,17 +2030,17 @@ Generate production-ready FreeCAD Python code that creates a professional {model
         self.logger.info(f"  - Views detected: {view_count}")
         self.logger.info(f"  - Grid system: {has_grid}")
         
-        # REQUIREMENTS for professional blueprints (adjusted for template capabilities)
-        if total_drawing_commands < 15:
-            self.logger.warning(f"❌ INSUFFICIENT DETAIL: Only {total_drawing_commands} drawing commands (need minimum 15 for complex drawings)")
+        # STRICT REQUIREMENTS for professional blueprints
+        if total_drawing_commands < 30:
+            self.logger.warning(f"❌ INSUFFICIENT DETAIL: Only {total_drawing_commands} drawing commands (need minimum 30 for complex drawings)")
             return False
         
-        if dimensions < 4:
-            self.logger.warning(f"❌ MISSING DIMENSIONS: Only {dimensions} dimensions (need minimum 4 to show all measurements)")
+        if dimensions < 8:
+            self.logger.warning(f"❌ MISSING DIMENSIONS: Only {dimensions} dimensions (need minimum 8 to show all measurements)")
             return False
             
-        if labels < 4:
-            self.logger.warning(f"❌ MISSING LABELS: Only {labels} labels (need minimum 4 for component identification)")
+        if labels < 8:
+            self.logger.warning(f"❌ MISSING LABELS: Only {labels} labels (need minimum 8 for component identification)")
             return False
         
         if view_count < 2:
@@ -2097,38 +2143,18 @@ Generate CONSTRUCTION-READY professional blueprint with ALL views, dimensions, l
             
             self.logger.info("Regenerating with 2D-only emphasis...")
             
-            # Call AI with enhanced prompt (provider-aware)
-            if self.provider == 'gemini':
-                try:
-                    response = self.client.generate_content(
-                        enhanced_prompt,
-                        generation_config=genai.types.GenerationConfig(
-                            temperature=0.3,
-                            max_output_tokens=8000,
-                        ),
-                        safety_settings=[
-                            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                        ]
-                    )
-                    generated_code = response.text if response and hasattr(response, 'text') else ""
-                except Exception as e:
-                    self.logger.error(f"Gemini regeneration failed: {e}, falling back to template")
-                    # Use intelligent template when Gemini is blocked
-                    return self._create_intelligent_template(command)
-            else:  # groq
-                response = self.client.chat.completions.create(
-                    model=self.config.groq.model,
-                    messages=[
-                        {"role": "system", "content": self._get_system_prompt()},
-                        {"role": "user", "content": enhanced_prompt}
-                    ],
-                    max_tokens=8000,
-                    temperature=0.3
-                )
-                generated_code = response.choices[0].message.content if response.choices else ""
+            # Call AI with enhanced prompt (using Groq)
+            response = self.client.chat.completions.create(
+                model=self.config.groq.model,
+                messages=[
+                    {"role": "system", "content": self._get_system_prompt()},
+                    {"role": "user", "content": enhanced_prompt}
+                ],
+                max_tokens=8000,
+                temperature=0.3
+            )
+            
+            generated_code = response.choices[0].message.content if response.choices else ""
             
             if generated_code:
                 cleaned_code = self._clean_generated_code(generated_code)

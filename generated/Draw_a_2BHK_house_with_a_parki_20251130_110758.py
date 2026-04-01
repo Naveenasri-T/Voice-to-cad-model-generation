@@ -99,7 +99,7 @@ for i in range(0, 13000, grid_spacing):
         FreeCAD.Vector(i, 0, 0),
         FreeCAD.Vector(i, 6000, 0)
     )
-    grid_line.ViewObject.LineWidth = 0.5
+    grid_line.ViewObject    grid_line.ViewObject.LineWidth = 0.5
     grid_line.ViewObject.LineStyle = "Dashed"
     label = Draft.makeText(
         [chr(65 + i//grid_spacing)],  # A, B, C...

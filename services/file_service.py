@@ -41,19 +41,6 @@ class FileService:
             with open(filepath, 'w', encoding=self.config.encoding) as f:
                 f.write(cleaned_code)
             
-            # CRITICAL: Re-read and apply post-save fixes for patterns that slip through
-            with open(filepath, 'r', encoding=self.config.encoding) as f:
-                saved_code = f.read()
-            
-            # Apply aggressive ViewObject fixes
-            saved_code = re.sub(r'(\s+)(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject\.', r'\1\2.ViewObject\n\1\3.ViewObject.', saved_code)
-            
-            # Re-save if fixes were applied
-            if saved_code != cleaned_code:
-                with open(filepath, 'w', encoding=self.config.encoding) as f:
-                    f.write(saved_code)
-                self.logger.info(f"Applied post-save fixes to: {filepath}")
-            
             self.logger.info(f"Saved generated code: {filepath}")
             return str(filepath)
             
@@ -110,18 +97,67 @@ class FileService:
             code = re.sub(r'^from\s*$', '', code, flags=re.MULTILINE)
             code = re.sub(r'^from\s+import\s*$', '', code, flags=re.MULTILINE)
             
-            # Fix ViewObject attribute errors (dim1.ViewObjectdim1.ViewObject)
-            code = re.sub(r'(\w+)\.ViewObject(\w+)\.ViewObject\.', r'\1.ViewObject.', code)
+            # ====== CRITICAL: Fix ViewObject errors BEFORE file write - NUCLEAR OPTION ======
+            # Multiple different patterns to catch ALL variations of this bug
             
-            # Fix missing newlines after ViewObject
+            # Pattern 1: Fix dim1.ViewObjectdim1.ViewObject.FontSize (same variable name repeated)
+            code = re.sub(r'(\w+)\.ViewObject\1\.ViewObject', r'\1.ViewObject', code)
+            
+            # Pattern 2: Fix dim1.ViewObjectdim2.ViewObject (cross-variable contamination) 
+            for _ in range(15):  # Very aggressive - 15 passes
+                code = re.sub(r'\.ViewObject\w+\.ViewObject', '.ViewObject', code)
+                code = re.sub(r'\.ViewObject[a-z0-9_]+\.ViewObject', '.ViewObject', code, flags=re.IGNORECASE)
+            
+            # Pattern 3: Fix missing newlines (dim1.ViewObjectdim2 = Draft...)
             code = re.sub(r'(\w+)\.ViewObject(\w+)\s*=\s*Draft', r'\1.ViewObject\n\2 = Draft', code)
             
-            # Fix ViewObject concatenation without proper spacing (e.g., "ViewObject    grid_line.ViewObject")
-            # Pattern 1: variable.ViewObject    variable.ViewObject.property = value
-            code = re.sub(r'(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject\.', r'\1.ViewObject.\n    \2.ViewObject.', code)
+            # Pattern 4: Fix whitespace concatenation (grid_line.ViewObject    grid_line.ViewObject.LineWidth)
+            code = re.sub(r'(\w+)\.ViewObject\s+(\w+)\.ViewObject', r'\1.ViewObject\n    \2.ViewObject', code)
             
-            # Pattern 2: More aggressive - any ViewObject followed by multiple spaces then another variable
-            code = re.sub(r'\.ViewObject(\s{2,})(\w+)\.ViewObject', r'.ViewObject\n    \2.ViewObject', code)
+            # Pattern 5: Nuclear option - find any line with ViewObjectXXX.ViewObject and fix it
+            lines = code.split('\n')
+            fixed_lines = []
+            for line in lines:
+                # If line contains pattern like .ViewObject<something>.ViewObject, fix it
+                if '.ViewObject' in line and line.count('.ViewObject') >= 2:
+                    # CRITICAL: Fix syntax error with whitespace (grid_line.ViewObject    grid_line.ViewObject.LineWidth)
+                    if re.search(r'(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject', line):
+                        # Split the line at the whitespace gap
+                        match = re.search(r'^(\s*)(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject', line)
+                        if match:
+                            indent = match.group(1)
+                            var1 = match.group(2)
+                            var2 = match.group(3)
+                            # Split into two lines
+                            remaining = line[match.end():]
+                            fixed_lines.append(f'{indent}{var1}.ViewObject')
+                            line = f'{indent}{var2}.ViewObject{remaining}'
+                    
+                    # Replace any .ViewObject<word>.ViewObject with just .ViewObject
+                    line = re.sub(r'\.ViewObject[a-zA-Z0-9_]+\.ViewObject', '.ViewObject', line)
+                fixed_lines.append(line)
+            code = '\n'.join(fixed_lines)
+            
+            # ===== FIX: Wrap problematic LineStyle assignments in try-except =====
+            lines = code.split('\n')
+            fixed_lines = []
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                # Check if this line sets LineStyle
+                if '.ViewObject.LineStyle' in line:
+                    # Get the indentation
+                    indent = len(line) - len(line.lstrip())
+                    indent_str = ' ' * indent
+                    # Wrap in try-except
+                    fixed_lines.append(f'{indent_str}try:')
+                    fixed_lines.append(f'{indent_str}    {line.strip()}')
+                    fixed_lines.append(f'{indent_str}except AttributeError:')
+                    fixed_lines.append(f'{indent_str}    pass  # LineStyle not supported')
+                else:
+                    fixed_lines.append(line)
+                i += 1
+            code = '\n'.join(fixed_lines)
             
             # Clean up multiple empty lines
             code = re.sub(r'\n\s*\n\s*\n', '\n\n', code)
