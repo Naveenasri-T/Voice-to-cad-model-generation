@@ -1,0 +1,141 @@
+{
+  "construction_standards": {
+    "wall_thickness": {
+      "residential": {
+        "exterior": 250,
+        "interior": 150,
+        "load_bearing": 300
+      },
+      "commercial": {
+        "exterior": 300,
+        "interior": 200,
+        "load_bearing": 400
+      },
+      "educational": {
+        "exterior": 350,
+        "interior": 200,
+        "load_bearing": 450
+      }
+    },
+    "ceiling_height": {
+      "residential": 3000,
+      "commercial": 3500,
+      "educational": 3800
+    },
+    "door_dimensions": {
+      "standard": {
+        "width": 900,
+        "height": 2100
+      },
+      "main_entrance": {
+        "width": 1200,
+        "height": 2400
+      },
+      "commercial": {
+        "width": 1000,
+        "height": 2200
+      }
+    },
+    "window_dimensions": {
+      "standard": {
+        "width": 1200,
+        "height": 1200
+      },
+      "large": {
+        "width": 1800,
+        "height": 1500
+      },
+      "commercial": {
+        "width": 2000,
+        "height": 1800
+      }
+    },
+    "slab_thickness": {
+      "residential": 150,
+      "commercial": 200,
+      "educational": 250
+    }
+  },
+  "materials": {
+    "walls": {
+      "brick": {
+        "color": [0.8, 0.6, 0.4],
+        "density": 1800,
+        "thermal_conductivity": 0.6,
+        "cost_factor": 1.0
+      },
+      "concrete": {
+        "color": [0.7, 0.7, 0.7],
+        "density": 2400,
+        "thermal_conductivity": 1.7,
+        "cost_factor": 1.2
+      },
+      "steel_frame": {
+        "color": [0.5, 0.5, 0.6],
+        "density": 7800,
+        "thermal_conductivity": 50,
+        "cost_factor": 1.8
+      }
+    },
+    "roofing": {
+      "concrete_slab": {
+        "color": [0.6, 0.6, 0.6],
+        "thickness": 150
+      },
+      "metal_sheet": {
+        "color": [0.4, 0.4, 0.5],
+        "thickness": 50
+      },
+      "tiles": {
+        "color": [0.7, 0.4, 0.3],
+        "thickness": 25
+      }
+    },
+    "windows": {
+      "aluminum": {
+        "color": [0.8, 0.8, 0.9],
+        "frame_thickness": 50
+      },
+      "wood": {
+        "color": [0.6, 0.4, 0.2],
+        "frame_thickness": 60
+      },
+      "upvc": {
+        "color": [0.9, 0.9, 0.9],
+        "frame_thickness": 70
+      }
+    }
+  },
+  "regional_codes": {
+    "india": {
+      "building_code": "NBC-2016",
+      "minimum_room_area": {
+        "bedroom": 9.5,
+        "living_room": 12.0,
+        "kitchen": 5.5,
+        "bathroom": 2.8
+      },
+      "mandatory_features": ["ventilation", "fire_safety", "earthquake_resistance"]
+    },
+    "usa": {
+      "building_code": "IBC-2021",
+      "minimum_room_area": {
+        "bedroom": 7.0,
+        "living_room": 10.0,
+        "kitchen": 4.5,
+        "bathroom": 2.5
+      },
+      "mandatory_features": ["accessibility", "energy_efficiency", "fire_safety"]
+    },
+    "europe": {
+      "building_code": "EUROCODE",
+      "minimum_room_area": {
+        "bedroom": 8.0,
+        "living_room": 12.0,
+        "kitchen": 5.0,
+        "bathroom": 3.0
+      },
+      "mandatory_features": ["energy_efficiency", "accessibility", "sustainability"]
+    }
+  }
+}

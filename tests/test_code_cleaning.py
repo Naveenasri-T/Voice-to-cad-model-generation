@@ -1,129 +1,98 @@
+#!/usr/bin/env python3
 """
-Test script to verify code cleaning and generation
+Test for empty module name fix
 """
-import os
+
 import sys
-import py_compile
-from dotenv import load_dotenv
-from groq import Groq
-import re
+from pathlib import Path
 
-# Load environment variables
-load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-client = Groq(api_key=GROQ_API_KEY)
+# Add project root to path
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
 
-def _clean_ai_code(raw_code: str) -> str:
-    """Enhanced code cleaning function"""
-    if not raw_code:
-        return ""
-    
-    # Remove code block markers
-    cleaned = re.sub(r"^```(?:python)?\s*", "", raw_code, flags=re.IGNORECASE | re.MULTILINE)
-    cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.IGNORECASE | re.MULTILINE)
-    cleaned = cleaned.replace("```", "")
-    
-    # Remove explanatory text before the first import
-    lines = cleaned.split('\n')
-    code_start = -1
-    
-    for i, line in enumerate(lines):
-        if line.strip().startswith('import ') or line.strip().startswith('# Import'):
-            code_start = i
-            break
-    
-    if code_start >= 0:
-        cleaned = '\n'.join(lines[code_start:])
-    
-    # Remove standalone 'python' keywords
-    cleaned = re.sub(r'^python\s*$', '', cleaned, flags=re.MULTILINE)
-    
-    # Remove any remaining explanatory text at the beginning
-    cleaned = re.sub(r'^[^#\n]*(?:Here\'s|This is|The following).*?\n', '', cleaned, flags=re.IGNORECASE)
-    
-    # Remove explanatory text at the end
-    lines = cleaned.split('\n')
-    code_end = len(lines)
-    
-    for i in range(len(lines) - 1, -1, -1):
-        line = lines[i].strip()
-        if line and not line.startswith('#') and not line.startswith('This ') and not line.startswith('The '):
-            if 'import ' in line or 'def ' in line or 'class ' in line or any(keyword in line for keyword in ['doc.', 'Part.', 'FreeCAD']):
-                code_end = i + 1
-                break
-    
-    cleaned = '\n'.join(lines[:code_end])
-    
-    return cleaned.strip()
-
-def test_syntax(code_content, filename="test_generated.py"):
-    """Test if the generated code has valid Python syntax"""
+def test_code_cleaning():
+    """Test the code cleaning function"""
     try:
-        # Write to temporary file
-        with open(filename, 'w', encoding='utf-8') as f:
-            f.write(code_content)
+        from services.ai_service import AIService
+        from config.settings import config
         
-        # Try to compile
-        py_compile.compile(filename, doraise=True)
-        print(f"✅ {filename}: Valid Python syntax")
-        return True
+        print("🔧 Testing Code Cleaning for Empty Module Name Fix...")
         
-    except py_compile.PyCompileError as e:
-        print(f"❌ {filename}: Syntax error - {e}")
-        return False
+        # Create a sample problematic code with duplicate imports and empty imports
+        problematic_code = """import FreeCAD
+import Part
+
+doc = FreeCAD.newDocument("Model")
+# Import necessary modules
+import FreeCAD
+import Part
+import 
+from 
+from import
+import  
+
+# Create a simple cube
+cube = doc.addObject("Part::Box", "Cube")
+cube.Length = 1000
+cube.Width = 1000  
+cube.Height = 1000
+
+doc.recompute()
+"""
+        
+        ai_service = AIService(config.ai)
+        
+        print("🧹 Running code cleaning...")
+        cleaned_code = ai_service._clean_generated_code(problematic_code)
+        
+        print(f"✅ Cleaned code length: {len(cleaned_code)}")
+        
+        # Check for issues
+        issues = []
+        if 'import \n' in cleaned_code:
+            issues.append("Empty import statement found")
+        if 'from \n' in cleaned_code:
+            issues.append("Empty from statement found")
+        if 'import FreeCAD\nimport FreeCAD' in cleaned_code:
+            issues.append("Duplicate imports found")
+        
+        if issues:
+            print("❌ Issues found:")
+            for issue in issues:
+                print(f"  - {issue}")
+            return False
+        else:
+            print("✅ No issues found in cleaned code!")
+            print("📄 Cleaned code preview:")
+            print("-" * 50)
+            lines = cleaned_code.split('\n')
+            for i, line in enumerate(lines[:10], 1):
+                print(f"{i:2}: {line}")
+            if len(lines) > 10:
+                print("... (truncated)")
+            print("-" * 50)
+            return True
+            
     except Exception as e:
-        print(f"❌ {filename}: Error - {e}")
+        print(f"❌ Error during test: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
-def test_code_generation_and_cleaning():
-    """Test code generation with various commands"""
-    test_commands = [
-        "create a simple cube",
-        "generate a 2bhk house",
-        "make a cylinder with radius 5",
-        "build a 3bhk house with parking"
-    ]
+def main():
+    """Main test function"""
+    print("🔧 Empty Module Name Error Fix Test")
+    print("=" * 50)
     
-    print("🧪 Testing Code Generation and Cleaning\n")
+    test_ok = test_code_cleaning()
     
-    for i, command in enumerate(test_commands):
-        print(f"Test {i+1}: {command}")
-        
-        # Generate code
-        prompt = f"""
-        Create FreeCAD Python code for: {command}
-        
-        Rules:
-        - Import FreeCAD, Part, Draft, FreeCADGui
-        - Create document: doc = FreeCAD.newDocument()
-        - Use Part.makeBox, Part.makeCylinder etc.
-        - End with doc.recompute(), viewAxometric(), ViewFit()
-        """
-        
-        try:
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
-                max_tokens=2000
-            )
-            
-            raw_code = response.choices[0].message.content
-            clean_code = _clean_ai_code(raw_code)
-            
-            # Test syntax
-            filename = f"test_generated_{i+1}.py"
-            if test_syntax(clean_code, filename):
-                print(f"   Generated {len(clean_code)} characters of clean code")
-            else:
-                print(f"   ❌ Failed syntax test")
-                print(f"   First 200 chars: {clean_code[:200]}")
-            
-        except Exception as e:
-            print(f"   ❌ Generation failed: {e}")
-        
-        print()
+    print("\n" + "=" * 50)
+    print(f"Test Result: {'✅ PASS' if test_ok else '❌ FAIL'}")
+    
+    if test_ok:
+        print("🎉 Code cleaning is working properly!")
+    else:
+        print("⚠️ Code cleaning needs more work.")
 
 if __name__ == "__main__":
-    test_code_generation_and_cleaning()
-    print("🎯 Testing completed!")
+    main()
