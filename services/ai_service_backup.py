@@ -11,7 +11,7 @@ except ImportError:
     GROQ_AVAILABLE = False
 
 try:
-    import google.generativeai as genai
+    import google.genai as genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -57,7 +57,10 @@ class AIService:
     
     def _initialize_gemini_client(self) -> None:
         if not GEMINI_AVAILABLE:
-            self.logger.error("Google Generative AI library not available - AI functionality disabled")
+            self.logger.error(
+                "google-genai package not available. Install it with 'pip install google-genai' "
+                "(see https://github.com/google-gemini/deprecated-generative-ai-python) to enable Gemini support."
+            )
             return
             
         if not self.config.gemini.api_key:

@@ -4,11 +4,11 @@ An intelligent voice-controlled CAD application that converts voice commands or 
 
 ## ✨ Features
 
-- **🗣️ Voice Input**: Record voice commands to generate CAD models
-- **📝 Text Input**: Type descriptions for precise model generation  
-- **🤖 AI-Powered**: Uses Groq AI (Llama-3.3-70b) for intelligent code generation
-- **🎯 Universal Models**: Automatically detects and generates both 2D sketches and 3D models
-## 📋 Prerequisites
+- ** Voice Input**: Record voice commands to generate CAD models
+- **Text Input**: Type descriptions for precise model generation  
+- **AI-Powered**: Uses Groq AI (Llama-3.3-70b) for intelligent code generation
+- ** Universal Models**: Automatically detects and generates both 2D sketches and 3D models
+##  Prerequisites
 
 Before starting, ensure you have:
 

@@ -20,33 +20,40 @@ class FileService:
         self.directories = directories
         self.logger = logging.getLogger(__name__)
         
-    def save_generated_code(self, code: str, command: str) -> str:
-        """Save generated FreeCAD code to file with automatic cleaning"""
+    def save_generated_code(self, code: str, command: str) -> Path:
+        """Save generated FreeCAD code to file with automatic cleaning.
+
+        Returns the saved file as a Path object so callers can use .name, .parent, etc.
+        On failure, returns Path('') and logs the error.
+        """
         try:
             # Clean the code before saving
             cleaned_code = self._clean_freecad_code(code)
-            
+
             # Create safe filename from command
             safe_name = self._create_safe_filename(command)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{safe_name}_{timestamp}.py"
-            
+
             # Ensure filename length limit
             if len(filename) > self.config.max_filename_length:
-                filename = filename[:self.config.max_filename_length-3] + ".py"
-            
+                filename = filename[:self.config.max_filename_length - 3] + ".py"
+
             filepath = self.directories['generated'] / filename
-            
+
+            # Ensure parent directory exists
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+
             # Save with proper encoding
             with open(filepath, 'w', encoding=self.config.encoding) as f:
                 f.write(cleaned_code)
-            
+
             self.logger.info(f"Saved generated code: {filepath}")
-            return str(filepath)
-            
+            return filepath
+
         except Exception as e:
             self.logger.error(f"Failed to save code: {e}")
-            return ""
+            return Path('')
     
     def _clean_freecad_code(self, code: str) -> str:
         """Clean FreeCAD code to remove deprecated patterns"""
@@ -97,46 +104,47 @@ class FileService:
             code = re.sub(r'^from\s*$', '', code, flags=re.MULTILINE)
             code = re.sub(r'^from\s+import\s*$', '', code, flags=re.MULTILINE)
             
-            # ====== CRITICAL: Fix ViewObject errors BEFORE file write - NUCLEAR OPTION ======
-            # Multiple different patterns to catch ALL variations of this bug
-            
-            # Pattern 1: Fix dim1.ViewObjectdim1.ViewObject.FontSize (same variable name repeated)
+
+            # ── ViewObject merge fixer ──────────────────────────────────────
+            # Only fixes ACTUALLY merged tokens (no dot between ViewObject and var name).
+            # Examples of bad tokens we fix:
+            #   dim1.ViewObjectdim1.ViewObject  → dim1.ViewObject
+            #   obj.ViewObject   obj.ViewObject.LineWidth  → split across lines
+            # We do NOT touch valid lines like:
+            #   d.ViewObject.FontSize = 260   ← leave alone!
+
+            # Pattern 1 (safe): same-variable merge  dim1.ViewObjectdim1.ViewObject
             code = re.sub(r'(\w+)\.ViewObject\1\.ViewObject', r'\1.ViewObject', code)
-            
-            # Pattern 2: Fix dim1.ViewObjectdim2.ViewObject (cross-variable contamination) 
-            for _ in range(15):  # Very aggressive - 15 passes
-                code = re.sub(r'\.ViewObject\w+\.ViewObject', '.ViewObject', code)
-                code = re.sub(r'\.ViewObject[a-z0-9_]+\.ViewObject', '.ViewObject', code, flags=re.IGNORECASE)
-            
-            # Pattern 3: Fix missing newlines (dim1.ViewObjectdim2 = Draft...)
+
+            # Pattern 2 (safe, line-by-line): generic cross-variable merge
+            # Matches .ViewObject<WORD_NO_DOT>.ViewObject → .ViewObject
+            # Key: \w+ means NO dot in the middle, so .ViewObject.FontSize is NOT matched
+            code = re.sub(r'\.ViewObject([A-Za-z_]\w*)\.ViewObject', r'.ViewObject', code)
+
+            # Pattern 3 (safe): missing newline before Draft assignment
             code = re.sub(r'(\w+)\.ViewObject(\w+)\s*=\s*Draft', r'\1.ViewObject\n\2 = Draft', code)
-            
-            # Pattern 4: Fix whitespace concatenation (grid_line.ViewObject    grid_line.ViewObject.LineWidth)
-            code = re.sub(r'(\w+)\.ViewObject\s+(\w+)\.ViewObject', r'\1.ViewObject\n    \2.ViewObject', code)
-            
-            # Pattern 5: Nuclear option - find any line with ViewObjectXXX.ViewObject and fix it
+
+            # Pattern 4 (safe, line-by-line only): whitespace-gap merger
+            # ONLY matches TWO+ spaces between ViewObject and another var (not a dot)
+            # Running line-by-line prevents cross-line corruption
             lines = code.split('\n')
             fixed_lines = []
             for line in lines:
-                # If line contains pattern like .ViewObject<something>.ViewObject, fix it
-                if '.ViewObject' in line and line.count('.ViewObject') >= 2:
-                    # CRITICAL: Fix syntax error with whitespace (grid_line.ViewObject    grid_line.ViewObject.LineWidth)
-                    if re.search(r'(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject', line):
-                        # Split the line at the whitespace gap
-                        match = re.search(r'^(\s*)(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject', line)
-                        if match:
-                            indent = match.group(1)
-                            var1 = match.group(2)
-                            var2 = match.group(3)
-                            # Split into two lines
-                            remaining = line[match.end():]
-                            fixed_lines.append(f'{indent}{var1}.ViewObject')
-                            line = f'{indent}{var2}.ViewObject{remaining}'
-                    
-                    # Replace any .ViewObject<word>.ViewObject with just .ViewObject
-                    line = re.sub(r'\.ViewObject[a-zA-Z0-9_]+\.ViewObject', '.ViewObject', line)
+                # Only touch lines that have a bare .ViewObject followed by 2+ spaces then a word
+                # Example: "grid_line.ViewObject    grid_line.ViewObject.LineWidth"
+                ws_match = re.search(r'(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject', line)
+                if ws_match:
+                    m = re.match(r'^(\s*)(\w+)\.ViewObject\s{2,}(\w+)\.ViewObject(.*)$', line)
+                    if m:
+                        indent = m.group(1)
+                        var1   = m.group(2)
+                        var2   = m.group(3)
+                        rest   = m.group(4)
+                        fixed_lines.append(f'{indent}{var1}.ViewObject')
+                        line = f'{indent}{var2}.ViewObject{rest}'
                 fixed_lines.append(line)
             code = '\n'.join(fixed_lines)
+
             
             # ===== FIX: Wrap problematic LineStyle assignments in try-except =====
             lines = code.split('\n')

@@ -6,4 +6,4 @@ groq
 openai
 httpx
 httpcore
-google-generativeai
+google-genai

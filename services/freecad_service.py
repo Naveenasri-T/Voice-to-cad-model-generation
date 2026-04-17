@@ -53,22 +53,39 @@ class FreeCADService:
     def _enhance_code(self, code: str, quality_level: str) -> str:
         try:
             if quality_level == "professional":
-                header = '''import FreeCAD
-import Part
+                # Detect whether this is a 2D Draft-only script or a 3D Part script
+                is_2d_draft = 'import Draft' in code or 'Draft.make' in code
+                is_3d_part  = 'import Part' in code or 'Part.makeBox' in code
 
-doc = FreeCAD.newDocument("Model")
-'''
-                footer = '''
-doc.recompute()
-if hasattr(FreeCAD, 'Gui'):
-    FreeCAD.Gui.SendMsgToActiveView("ViewFit")
-    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()
-'''
-                
-                return header + code + footer
+                if is_2d_draft and not is_3d_part:
+                    # 2D blueprint — only add Draft import if missing
+                    if 'import FreeCAD' not in code:
+                        code = 'import FreeCAD\nimport Draft\n\n' + code
+                    if 'doc.recompute()' not in code:
+                        code += '\n\ndoc.recompute()\n'
+                    if 'ViewFit' not in code:
+                        code += (
+                            'if hasattr(FreeCAD, "Gui") and FreeCAD.Gui:\n'
+                            '    try:\n'
+                            '        FreeCAD.Gui.SendMsgToActiveView("ViewFit")\n'
+                            '        FreeCAD.Gui.ActiveDocument.activeView().viewTop()\n'
+                            '    except Exception:\n'
+                            '        pass\n'
+                        )
+                    return code
+                else:
+                    # 3D Part script — add typical Part header/footer
+                    header = 'import FreeCAD\nimport Part\n\ndoc = FreeCAD.newDocument("Model")\n'
+                    footer = (
+                        '\ndoc.recompute()\n'
+                        'if hasattr(FreeCAD, "Gui"):\n'
+                        '    FreeCAD.Gui.SendMsgToActiveView("ViewFit")\n'
+                        '    FreeCAD.Gui.ActiveDocument.activeView().viewIsometric()\n'
+                    )
+                    return header + code + footer
             else:
                 return code
-                
+
         except Exception as e:
             self.logger.warning(f"Code enhancement failed: {e}")
             return code
